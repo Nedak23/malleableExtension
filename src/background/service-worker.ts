@@ -1,4 +1,4 @@
-import { Message, CSSRule, LLMResponse } from '../shared/types';
+import { Message, CSSRule, LLMResponse, ChatMessage } from '../shared/types';
 import { llmClient } from './llm-client';
 import {
   getCSSForDomain,
@@ -14,6 +14,9 @@ import {
   saveSettings,
   generateId,
   extractDomain,
+  getChatMessages,
+  saveChatMessages,
+  clearChatMessages,
 } from '../shared/storage';
 import { WARNING_THRESHOLD, BROKEN_THRESHOLD } from '../shared/constants';
 
@@ -96,6 +99,28 @@ async function handleMessage(
       return { success: true };
     }
 
+    case 'GET_CHAT_MESSAGES': {
+      const domain = message.domain as string;
+      const ruleId = message.ruleId as string;
+      const messages = await getChatMessages(domain, ruleId);
+      return { messages };
+    }
+
+    case 'SAVE_CHAT_MESSAGES': {
+      const domain = message.domain as string;
+      const ruleId = message.ruleId as string;
+      const messages = (message.messages as ChatMessage[]) ?? [];
+      await saveChatMessages(domain, ruleId, messages);
+      return { success: true };
+    }
+
+    case 'CLEAR_CHAT_MESSAGES': {
+      const domain = message.domain as string;
+      const ruleId = message.ruleId as string;
+      await clearChatMessages(domain, ruleId);
+      return { success: true };
+    }
+
     default:
       return { error: 'Unknown message type' };
   }
@@ -112,6 +137,7 @@ async function handleGenerateCSS(message: Message): Promise<{
   const url = message.url as string;
   const title = message.title as string;
   const tabId = message.tabId as number;
+  const initialMessages = message.initialMessages as ChatMessage[] | undefined;
 
   try {
     // Get serialized DOM from content script
@@ -148,9 +174,26 @@ async function handleGenerateCSS(message: Message): Promise<{
       };
     }
 
+    // Create the rule ID first so we can include it in the assistant message
+    const ruleId = generateId();
+    const explanation = llmResponse.explanation || 'CSS applied successfully';
+
+    // Build chat messages including the assistant response
+    const assistantMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      type: 'assistant',
+      content: explanation,
+      timestamp: Date.now(),
+      ruleId: ruleId,
+    };
+
+    const chatMessages = initialMessages
+      ? [...initialMessages, assistantMessage]
+      : [assistantMessage];
+
     // Create and save the rule
     const rule: CSSRule = {
-      id: generateId(),
+      id: ruleId,
       userRequest: request,
       generatedCSS: llmResponse.css,
       selectors: llmResponse.selectors || [],
@@ -162,6 +205,7 @@ async function handleGenerateCSS(message: Message): Promise<{
       createdAt: Date.now(),
       updatedAt: Date.now(),
       lastValidated: null,
+      chatMessages: chatMessages,
     };
 
     await saveRule(domain, rule);
@@ -172,7 +216,7 @@ async function handleGenerateCSS(message: Message): Promise<{
     return {
       success: true,
       ruleId: rule.id,
-      explanation: llmResponse.explanation || 'CSS applied successfully',
+      explanation: explanation,
     };
   } catch (error) {
     return {

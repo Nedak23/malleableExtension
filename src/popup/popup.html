@@ -56,6 +56,12 @@
       color: #333;
     }
 
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
     .icon-btn {
       background: none;
       border: none;
@@ -204,11 +210,8 @@
     .active-rules {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      padding: 8px 16px;
-      background: #f5f5f5;
-      border-top: 1px solid #e5e5e5;
-      font-size: 13px;
+      gap: 8px;
+      font-size: 12px;
       color: #666;
     }
 
@@ -217,7 +220,7 @@
       border: none;
       color: #0066cc;
       cursor: pointer;
-      font-size: 13px;
+      font-size: 12px;
     }
 
     .text-btn:hover {
@@ -280,6 +283,134 @@
     .message.undone {
       opacity: 0.5;
       text-decoration: line-through;
+    }
+
+    /* Tab bar styles */
+    .tab-bar {
+      display: flex;
+      align-items: center;
+      background: #f5f5f5;
+      border-bottom: 1px solid #e5e5e5;
+      padding: 0 4px;
+      height: 36px;
+      flex-shrink: 0;
+    }
+
+    .tabs-scroll {
+      display: flex;
+      overflow-x: auto;
+      flex: 1;
+      gap: 2px;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    .tabs-scroll::-webkit-scrollbar {
+      display: none;
+    }
+
+    .tab {
+      background: none;
+      border: none;
+      padding: 6px 10px;
+      font-size: 12px;
+      color: #666;
+      cursor: pointer;
+      white-space: nowrap;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tab:hover {
+      color: #333;
+      background: #e8e8e8;
+    }
+
+    .tab.active {
+      color: #0066cc;
+      border-bottom-color: #0066cc;
+      background: #fff;
+    }
+
+    .tab-close {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+      opacity: 0.5;
+    }
+
+    .tab-close:hover {
+      opacity: 1;
+      background: rgba(0, 0, 0, 0.1);
+    }
+
+    .new-tab-wrapper {
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .new-tab-btn {
+      background: none;
+      border: none;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      border-radius: 4px;
+      color: #666;
+    }
+
+    .new-tab-btn:hover {
+      background: #e5e5e5;
+      color: #333;
+    }
+
+    .new-tab-picker {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      background: white;
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      min-width: 200px;
+      max-width: 280px;
+      z-index: 100;
+      overflow: hidden;
+    }
+
+    .picker-option {
+      padding: 10px 14px;
+      cursor: pointer;
+      font-size: 13px;
+      color: #333;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .picker-option:hover {
+      background: #f5f5f5;
+    }
+
+    .picker-divider {
+      padding: 6px 14px;
+      font-size: 11px;
+      color: #999;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      background: #fafafa;
+      border-top: 1px solid #e5e5e5;
+      border-bottom: 1px solid #e5e5e5;
     }
   </style>
 </head>

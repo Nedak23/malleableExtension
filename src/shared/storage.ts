@@ -3,6 +3,7 @@ import {
   DomainRules,
   CSSRule,
   UserSettings,
+  ChatMessage,
 } from './types';
 import {
   STORAGE_KEY,
@@ -56,11 +57,14 @@ export async function saveRule(domain: string, rule: CSSRule): Promise<void> {
     };
   }
 
-  const existingIndex = schema.domains[domain].rules.findIndex(r => r.id === rule.id);
+  // Ensure chatMessages array exists (without mutating the original)
+  const ruleToSave = rule.chatMessages ? rule : { ...rule, chatMessages: [] };
+
+  const existingIndex = schema.domains[domain].rules.findIndex(r => r.id === ruleToSave.id);
   if (existingIndex >= 0) {
-    schema.domains[domain].rules[existingIndex] = rule;
+    schema.domains[domain].rules[existingIndex] = ruleToSave;
   } else {
-    schema.domains[domain].rules.push(rule);
+    schema.domains[domain].rules.push(ruleToSave);
   }
 
   schema.domains[domain].lastAccessed = Date.now();
@@ -110,6 +114,26 @@ export async function updateRule(
       await saveSchema(schema);
     }
   }
+}
+
+// Get chat messages for a specific rule
+export async function getChatMessages(domain: string, ruleId: string): Promise<ChatMessage[]> {
+  const rule = await getRule(domain, ruleId);
+  return rule?.chatMessages || [];
+}
+
+// Save chat messages for a rule
+export async function saveChatMessages(
+  domain: string,
+  ruleId: string,
+  messages: ChatMessage[]
+): Promise<void> {
+  await updateRule(domain, ruleId, { chatMessages: messages });
+}
+
+// Clear chat messages for a rule (used when closing a tab)
+export async function clearChatMessages(domain: string, ruleId: string): Promise<void> {
+  await updateRule(domain, ruleId, { chatMessages: [] });
 }
 
 // Get all rules across all domains

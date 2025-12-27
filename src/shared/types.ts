@@ -1,6 +1,16 @@
 // Rule status progression: active → warning → broken
 export type RuleStatus = 'active' | 'warning' | 'broken' | 'disabled';
 
+// Chat message in a conversation
+export interface ChatMessage {
+  id: string;
+  type: 'user' | 'assistant' | 'system' | 'error';
+  content: string;
+  timestamp: number;
+  ruleId?: string;  // For assistant messages that created/modified a rule
+  undone?: boolean;
+}
+
 // How the selector was derived (for stability ranking)
 export type SelectorStrategy =
   | 'data-attribute'
@@ -25,6 +35,7 @@ export interface CSSRule {
   createdAt: number;
   updatedAt: number;
   lastValidated: number | null;
+  chatMessages: ChatMessage[];  // Persistent chat history for this rule
 }
 
 // Rules grouped by domain
@@ -74,7 +85,10 @@ export type MessageType =
   | 'SAVE_API_KEY'
   | 'GET_SETTINGS'
   | 'SAVE_SETTINGS'
-  | 'SERIALIZE_DOM';
+  | 'SERIALIZE_DOM'
+  | 'GET_CHAT_MESSAGES'
+  | 'SAVE_CHAT_MESSAGES'
+  | 'CLEAR_CHAT_MESSAGES';
 
 export interface Message {
   type: MessageType;

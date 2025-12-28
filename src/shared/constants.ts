@@ -5,13 +5,12 @@ export const CRYPTO_KEY_SESSION_KEY = 'malleableweb_crypto_key';
 export const STYLE_ELEMENT_ID = 'malleableweb-injected-styles';
 
 export const DEFAULT_SETTINGS = {
-  llmProvider: 'anthropic' as const,
+  model: 'claude-sonnet-4-5-20250929' as const,
   notifyOnFailure: true,
   theme: 'system' as const,
 };
 
-// Failure thresholds
-export const WARNING_THRESHOLD = 1;
+// Failure threshold
 export const BROKEN_THRESHOLD = 3;
 
 // DOM serialization limits

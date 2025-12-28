@@ -1,12 +1,11 @@
 import { render } from 'preact';
 import { useState, useEffect } from 'preact/hooks';
-import { CSSRule, DomainRules, UserSettings } from '../shared/types';
+import { CSSRule, ClaudeModel, DomainRules, UserSettings } from '../shared/types';
 import { DEFAULT_SETTINGS } from '../shared/constants';
 
 function App() {
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [apiKey, setApiKey] = useState('');
-  const [showApiKey, setShowApiKey] = useState(false);
   const [apiStatus, setApiStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [domains, setDomains] = useState<Record<string, DomainRules>>({});
   const [searchQuery, setSearchQuery] = useState('');
@@ -60,11 +59,29 @@ function App() {
   }
 
   async function handleToggleRule(domain: string, ruleId: string, enabled: boolean) {
+    const currentRule = domains[domain]?.rules.find(r => r.id === ruleId);
+    if (!currentRule) return;
+
+    let updates: Partial<CSSRule>;
+
+    if (enabled) {
+      // Re-enabling: restore previous status (or default to 'active')
+      const status = currentRule.previousStatus || 'active';
+      updates = { enabled, status, previousStatus: undefined };
+    } else {
+      // Disabling: save current status before setting to 'disabled'
+      // If already disabled, preserve the existing previousStatus
+      const previousStatus = currentRule.status === 'disabled'
+        ? currentRule.previousStatus || 'active'
+        : (currentRule.status as 'active' | 'broken');
+      updates = { enabled, status: 'disabled', previousStatus };
+    }
+
     await chrome.runtime.sendMessage({
       type: 'UPDATE_RULE',
       domain,
       ruleId,
-      updates: { enabled },
+      updates,
     });
 
     setDomains(prev => ({
@@ -72,7 +89,7 @@ function App() {
       [domain]: {
         ...prev[domain],
         rules: prev[domain].rules.map(r =>
-          r.id === ruleId ? { ...r, enabled } : r
+          r.id === ruleId ? { ...r, ...updates } : r
         ),
       },
     }));
@@ -194,42 +211,30 @@ function App() {
         <h2>API Configuration</h2>
 
         <div class="form-group">
-          <label htmlFor="llm-provider">LLM Provider</label>
+          <label htmlFor="model">Model</label>
           <select
-            id="llm-provider"
-            value={settings.llmProvider}
-            onChange={e => handleSettingsChange({ llmProvider: (e.target as HTMLSelectElement).value as 'openai' | 'anthropic' })}
+            id="model"
+            value={settings.model}
+            onChange={e => handleSettingsChange({ model: (e.target as HTMLSelectElement).value as ClaudeModel })}
           >
-            <option value="anthropic">Anthropic (Claude)</option>
-            <option value="openai">OpenAI (GPT-4)</option>
+            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (Fast)</option>
+            <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5 (Balanced)</option>
+            <option value="claude-opus-4-5-20251101">Claude Opus 4.5 (Most Capable)</option>
           </select>
         </div>
 
         <div class="form-group">
           <label htmlFor="api-key">API Key</label>
-          <div class="input-with-action">
-            <input
-              type={showApiKey ? 'text' : 'password'}
-              id="api-key"
-              value={apiKey}
-              onInput={e => setApiKey((e.target as HTMLInputElement).value)}
-              placeholder="Enter your API key"
-            />
-            <button
-              class="btn btn-icon"
-              onClick={() => setShowApiKey(!showApiKey)}
-              title={showApiKey ? 'Hide' : 'Show'}
-            >
-              {showApiKey ? '👁️' : '👁️‍🗨️'}
-            </button>
-          </div>
+          <input
+            type="password"
+            id="api-key"
+            value={apiKey}
+            onInput={e => setApiKey((e.target as HTMLInputElement).value)}
+            placeholder="Enter your API key"
+          />
           <p class="help-text">
             Your API key is encrypted and stored locally.{' '}
-            {settings.llmProvider === 'anthropic' ? (
-              <a href="https://console.anthropic.com/settings/keys" target="_blank">Get an Anthropic API key</a>
-            ) : (
-              <a href="https://platform.openai.com/api-keys" target="_blank">Get an OpenAI API key</a>
-            )}
+            <a href="https://console.anthropic.com/settings/keys" target="_blank">Get an Anthropic API key</a>
           </p>
         </div>
 
@@ -289,7 +294,6 @@ function App() {
           >
             <option value="all">All statuses</option>
             <option value="active">Active</option>
-            <option value="warning">Warning</option>
             <option value="broken">Broken</option>
             <option value="disabled">Disabled</option>
           </select>
@@ -302,19 +306,9 @@ function App() {
             </div>
           ) : (
             allRules.map(({ domain, rule }) => (
-              <div key={rule.id} class="rule-item">
-                <div class="rule-header">
-                  <span class="rule-domain">{domain}</span>
-                  <span class={`rule-status rule-status-${rule.status}`}>
-                    {rule.status}
-                  </span>
-                </div>
-                <p class="rule-request">"{rule.userRequest}"</p>
-                <p class="rule-date">
-                  Created {new Date(rule.createdAt).toLocaleDateString()}
-                </p>
-                <div class="rule-actions">
-                  <label class="toggle">
+              <div key={rule.id} class="rule-item rule-item-compact">
+                <div class="rule-row">
+                  <label class="toggle toggle-small">
                     <input
                       type="checkbox"
                       checked={rule.enabled}
@@ -322,20 +316,29 @@ function App() {
                     />
                     <span class="toggle-slider"></span>
                   </label>
+                  <span class="rule-domain">{domain}</span>
+                  <span class={`rule-status rule-status-${rule.status}`}>
+                    {rule.status}
+                  </span>
                   {rule.status === 'broken' && (
                     <button
-                      class="btn btn-secondary"
+                      class="btn btn-small btn-secondary"
                       onClick={() => handleRegenerateRule(domain, rule.id)}
                     >
-                      Regenerate
+                      Regen
                     </button>
                   )}
                   <button
-                    class="btn btn-danger"
+                    class="btn btn-small btn-danger-text"
                     onClick={() => handleDeleteRule(domain, rule.id)}
+                    title="Delete rule"
                   >
                     Delete
                   </button>
+                </div>
+                <div class="rule-details">
+                  <span class="rule-request">"{rule.userRequest}"</span>
+                  <span class="rule-date">{new Date(rule.createdAt).toLocaleDateString()}</span>
                 </div>
               </div>
             ))

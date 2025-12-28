@@ -17,8 +17,14 @@ import {
   getChatMessages,
   saveChatMessages,
   clearChatMessages,
+  migrateWarningStatus,
 } from '../shared/storage';
-import { WARNING_THRESHOLD, BROKEN_THRESHOLD } from '../shared/constants';
+import { BROKEN_THRESHOLD } from '../shared/constants';
+
+// Run migrations on startup (wrapped in IIFE to properly await)
+(async () => {
+  await migrateWarningStatus();
+})();
 
 // Handle messages from popup and content scripts
 chrome.runtime.onMessage.addListener((message: Message, sender, sendResponse) => {
@@ -306,8 +312,6 @@ async function handleValidationFailure(message: Message): Promise<void> {
 
     if (failureCount >= BROKEN_THRESHOLD) {
       status = 'broken';
-    } else if (failureCount >= WARNING_THRESHOLD) {
-      status = 'warning';
     }
 
     await updateRule(domain, ruleId, { failureCount, status });

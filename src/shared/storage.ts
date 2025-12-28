@@ -159,8 +159,11 @@ export async function saveSettings(settings: Partial<UserSettings>): Promise<voi
 
 // Encrypt and save API key
 export async function saveApiKey(apiKey: string): Promise<void> {
+  // Trim whitespace and remove non-printable ASCII characters (common from copy-paste)
+  const sanitizedKey = apiKey.trim().replace(/[^\x20-\x7E]/g, '');
+
   const encoder = new TextEncoder();
-  const data = encoder.encode(apiKey);
+  const data = encoder.encode(sanitizedKey);
 
   // Generate a new key for encryption
   const cryptoKey = await crypto.subtle.generateKey(
@@ -245,4 +248,23 @@ export async function clearApiKey(): Promise<void> {
 // Extract main domain from hostname
 export function extractDomain(hostname: string): string {
   return hostname.replace(/^www\./, '');
+}
+
+// Migrate old 'warning' statuses to 'active' (warning status was removed)
+export async function migrateWarningStatus(): Promise<void> {
+  const schema = await getSchema();
+  let modified = false;
+
+  for (const domain of Object.keys(schema.domains)) {
+    for (const rule of schema.domains[domain].rules) {
+      if ((rule.status as string) === 'warning') {
+        rule.status = 'active';
+        modified = true;
+      }
+    }
+  }
+
+  if (modified) {
+    await saveSchema(schema);
+  }
 }

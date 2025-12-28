@@ -1,5 +1,5 @@
-// Rule status progression: active → warning → broken
-export type RuleStatus = 'active' | 'warning' | 'broken' | 'disabled';
+// Rule status progression: active → broken
+export type RuleStatus = 'active' | 'broken' | 'disabled';
 
 // Chat message in a conversation
 export interface ChatMessage {
@@ -30,6 +30,7 @@ export interface CSSRule {
   selectorStrategies: SelectorStrategy[];
   enabled: boolean;
   status: RuleStatus;
+  previousStatus?: 'active' | 'broken';  // Status before being disabled
   failureCount: number;
   confidence: number;
   createdAt: number;
@@ -45,9 +46,12 @@ export interface DomainRules {
   lastAccessed: number;
 }
 
+// Claude model options
+export type ClaudeModel = 'claude-sonnet-4-5-20250929' | 'claude-haiku-4-5-20251001' | 'claude-opus-4-5-20251101';
+
 // User settings
 export interface UserSettings {
-  llmProvider: 'openai' | 'anthropic';
+  model: ClaudeModel;
   notifyOnFailure: boolean;
   theme: 'light' | 'dark' | 'system';
 }

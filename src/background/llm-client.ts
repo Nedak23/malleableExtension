@@ -1,6 +1,11 @@
-import { LLMResponse, UserSettings } from '../shared/types';
+import { LLMResponse } from '../shared/types';
 import { getApiKey, getSettings } from '../shared/storage';
 import { SYSTEM_PROMPT, formatUserPrompt } from '../prompts/system-prompt';
+
+// Sanitize string to only contain printable ASCII characters for HTTP headers
+function sanitizeForHeaders(str: string): string {
+  return str.replace(/[^\x20-\x7E]/g, '');
+}
 
 export class LLMClient {
   async generateCSS(
@@ -9,21 +14,20 @@ export class LLMClient {
     title: string,
     serializedDOM: string
   ): Promise<LLMResponse> {
-    const apiKey = await getApiKey();
+    let apiKey = await getApiKey();
 
     if (!apiKey) {
       return { success: false, error: 'API key not configured. Please add your API key in settings.' };
     }
 
+    // Ensure API key is safe for HTTP headers (remove non-ASCII characters)
+    apiKey = sanitizeForHeaders(apiKey.trim());
+
     const settings = await getSettings();
     const userPrompt = formatUserPrompt(request, url, title, serializedDOM);
 
     try {
-      if (settings.llmProvider === 'openai') {
-        return await this.callOpenAI(apiKey, userPrompt);
-      } else {
-        return await this.callAnthropic(apiKey, userPrompt);
-      }
+      return await this.callAnthropic(apiKey, settings.model, userPrompt);
     } catch (error) {
       return {
         success: false,
@@ -32,45 +36,7 @@ export class LLMClient {
     }
   }
 
-  private async callOpenAI(apiKey: string, userPrompt: string): Promise<LLMResponse> {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4-turbo-preview',
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.3,
-        max_tokens: 1000,
-        response_format: { type: 'json_object' },
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error?.message || `OpenAI API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices[0]?.message?.content;
-
-    if (!content) {
-      return { success: false, error: 'Empty response from OpenAI' };
-    }
-
-    try {
-      return JSON.parse(content) as LLMResponse;
-    } catch {
-      return { success: false, error: 'Invalid JSON response from OpenAI' };
-    }
-  }
-
-  private async callAnthropic(apiKey: string, userPrompt: string): Promise<LLMResponse> {
+  private async callAnthropic(apiKey: string, model: string, userPrompt: string): Promise<LLMResponse> {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -80,7 +46,7 @@ export class LLMClient {
         'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20250929',
+        model,
         max_tokens: 1000,
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: userPrompt }],

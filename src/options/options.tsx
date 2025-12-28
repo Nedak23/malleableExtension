@@ -194,7 +194,9 @@ function App() {
     for (const rule of domainRules.rules) {
       if (domainFilter !== 'all' && domain !== domainFilter) continue;
       if (statusFilter !== 'all' && rule.status !== statusFilter) continue;
-      if (searchQuery && !rule.userRequest.toLowerCase().includes(searchQuery.toLowerCase())) continue;
+      // Search by ruleName (or fall back to userRequest for older rules without names)
+      const searchTarget = (rule.ruleName || rule.userRequest).toLowerCase();
+      if (searchQuery && !searchTarget.includes(searchQuery.toLowerCase())) continue;
       allRules.push({ domain, rule });
     }
   }
@@ -337,7 +339,7 @@ function App() {
                   </button>
                 </div>
                 <div class="rule-details">
-                  <span class="rule-request">"{rule.userRequest}"</span>
+                  <span class="rule-request">{rule.ruleName || rule.userRequest}</span>
                   <span class="rule-date">{new Date(rule.createdAt).toLocaleDateString()}</span>
                 </div>
               </div>

@@ -328,11 +328,6 @@ function App() {
     }
   }
 
-  function handleExampleClick(request: string) {
-    setInput(request);
-    inputRef.current?.focus();
-  }
-
   function openSettings() {
     chrome.runtime.openOptionsPage();
   }
@@ -356,7 +351,7 @@ function App() {
                 src={`https://www.google.com/s2/favicons?domain=${domain}&sz=32`}
                 alt=""
               />
-              <span class="domain">{domain}</span>
+              <span class="domain" title={domain}>{domain}</span>
             </>
           )}
         </div>
@@ -392,9 +387,9 @@ function App() {
                 key={rule.id}
                 class={`tab ${activeTabId === rule.id ? 'active' : ''}`}
                 onClick={() => setActiveTabId(rule.id)}
-                title={rule.userRequest}
+                title={rule.ruleName || rule.userRequest}
               >
-                <span>{truncate(rule.userRequest, 15)}</span>
+                <span>{truncate(rule.ruleName || rule.userRequest, 15)}</span>
                 <span
                   class="tab-close"
                   onClick={(e) => {
@@ -432,7 +427,7 @@ function App() {
                         class="picker-option"
                         onClick={() => handleNewTabSelect(rule.id)}
                       >
-                        {truncate(rule.userRequest, 30)}
+                        {truncate(rule.ruleName || rule.userRequest, 30)}
                       </div>
                     ))}
                   </>
@@ -477,20 +472,6 @@ function App() {
           {showWelcome && (
             <div class="welcome-message">
               <p>Tell me how you'd like to customize this page.</p>
-              <div class="examples">
-                <button class="example-btn" onClick={() => handleExampleClick('Hide ads')}>
-                  Hide ads
-                </button>
-                <button class="example-btn" onClick={() => handleExampleClick('Make text larger')}>
-                  Larger text
-                </button>
-                <button class="example-btn" onClick={() => handleExampleClick('Dark mode')}>
-                  Dark mode
-                </button>
-                <button class="example-btn" onClick={() => handleExampleClick('Hide sidebar')}>
-                  Hide sidebar
-                </button>
-              </div>
             </div>
           )}
         </div>
@@ -503,7 +484,7 @@ function App() {
             value={input}
             onInput={e => setInput((e.target as HTMLTextAreaElement).value)}
             onKeyDown={handleKeyDown}
-            placeholder={hasApiKey ? "e.g., Hide the shorts section..." : "API key required - check settings"}
+            placeholder={hasApiKey ? "Message" : "API key required - check settings"}
             rows={1}
             disabled={isProcessing || !hasApiKey}
           />

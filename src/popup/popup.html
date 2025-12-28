@@ -43,17 +43,24 @@
       display: flex;
       align-items: center;
       gap: 8px;
+      min-width: 0;
+      flex: 1;
+      max-width: 160px;
     }
 
     .favicon {
       width: 20px;
       height: 20px;
       border-radius: 4px;
+      flex-shrink: 0;
     }
 
     .domain {
       font-weight: 500;
       color: #333;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .header-right {

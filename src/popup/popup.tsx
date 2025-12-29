@@ -119,9 +119,32 @@ function App() {
     }
   }
 
+  const MAX_REQUEST_LENGTH = 2000;
+
   async function handleSend() {
     const request = input.trim();
     if (!request || isProcessing) return;
+
+    // Validate request length
+    if (request.length > MAX_REQUEST_LENGTH) {
+      const errorMessage: ChatMessage = {
+        id: crypto.randomUUID(),
+        type: 'error',
+        content: `Request is too long (${request.length} characters). Please keep it under ${MAX_REQUEST_LENGTH} characters.`,
+        timestamp: Date.now(),
+      };
+
+      if (activeTabId === null) {
+        setDraftMessages(prev => [...prev, errorMessage]);
+      } else {
+        setRules(prev => prev.map(r =>
+          r.id === activeTabId
+            ? { ...r, chatMessages: [...(r.chatMessages || []), errorMessage] }
+            : r
+        ));
+      }
+      return;
+    }
 
     setIsProcessing(true);
     setInput('');

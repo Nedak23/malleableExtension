@@ -2,7 +2,8 @@
   "manifest_version": 3,
   "name": "MalleableWeb",
   "version": "1.0.0",
-  "description": "Customize any website with natural language commands",
+  "description": "Customize any website with natural language commands powered by AI. Hide elements, change styles, and personalize your browsing experience.",
+  "homepage_url": "https://github.com/Nedak23/malleableExtension",
   "permissions": [
     "storage",
     "activeTab",

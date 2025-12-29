@@ -3,6 +3,8 @@ import { useState, useEffect } from 'preact/hooks';
 import { CSSRule, ClaudeModel, DomainRules, UserSettings } from '../shared/types';
 import { DEFAULT_SETTINGS } from '../shared/constants';
 
+const FEEDBACK_API_URL = 'https://feedback-api-ten.vercel.app/api/feedback';
+
 function App() {
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [apiKey, setApiKey] = useState('');
@@ -11,6 +13,9 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [domainFilter, setDomainFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [feedbackStatus, setFeedbackStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
 
   useEffect(() => {
     loadData();
@@ -42,8 +47,20 @@ function App() {
       return;
     }
 
+    // Validate API key format (Anthropic keys start with sk-ant-)
+    const trimmedKey = apiKey.trim();
+    if (!trimmedKey.startsWith('sk-ant-')) {
+      setApiStatus({ type: 'error', message: 'Invalid API key format. Anthropic keys start with sk-ant-' });
+      return;
+    }
+
+    if (trimmedKey.length < 20) {
+      setApiStatus({ type: 'error', message: 'API key appears to be too short' });
+      return;
+    }
+
     try {
-      await chrome.runtime.sendMessage({ type: 'SAVE_API_KEY', apiKey });
+      await chrome.runtime.sendMessage({ type: 'SAVE_API_KEY', apiKey: trimmedKey });
       setApiStatus({ type: 'success', message: 'API key saved!' });
       setApiKey('••••••••••••••••');
       setTimeout(() => setApiStatus(null), 3000);
@@ -155,6 +172,36 @@ function App() {
     URL.revokeObjectURL(url);
   }
 
+  function validateImportedRules(data: unknown): data is Record<string, DomainRules> {
+    if (!data || typeof data !== 'object') return false;
+
+    for (const [domain, domainRules] of Object.entries(data as Record<string, unknown>)) {
+      // Validate domain is a string
+      if (typeof domain !== 'string' || domain.length === 0) return false;
+
+      // Validate domainRules structure
+      if (!domainRules || typeof domainRules !== 'object') return false;
+      const dr = domainRules as Record<string, unknown>;
+
+      if (!Array.isArray(dr.rules)) return false;
+
+      // Validate each rule
+      for (const rule of dr.rules) {
+        if (!rule || typeof rule !== 'object') return false;
+        const r = rule as Record<string, unknown>;
+
+        // Required fields
+        if (typeof r.id !== 'string' || r.id.length === 0) return false;
+        if (typeof r.userRequest !== 'string') return false;
+        if (typeof r.cssRule !== 'string') return false;
+        if (typeof r.enabled !== 'boolean') return false;
+        if (typeof r.createdAt !== 'number') return false;
+      }
+    }
+
+    return true;
+  }
+
   async function importRules() {
     const input = document.createElement('input');
     input.type = 'file';
@@ -165,7 +212,13 @@ function App() {
 
       try {
         const text = await file.text();
-        const imported = JSON.parse(text) as Record<string, DomainRules>;
+        const imported = JSON.parse(text);
+
+        // Validate the imported data structure
+        if (!validateImportedRules(imported)) {
+          alert('Invalid file format. The JSON structure does not match the expected rules format.');
+          return;
+        }
 
         // Save each domain's rules
         for (const [domain, domainRules] of Object.entries(imported)) {
@@ -188,6 +241,39 @@ function App() {
     input.click();
   }
 
+  async function handleSendFeedback() {
+    if (!feedbackMessage.trim()) return;
+
+    setFeedbackStatus('sending');
+
+    try {
+      const response = await fetch(FEEDBACK_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: feedbackMessage.trim() }),
+      });
+
+      if (response.ok) {
+        setFeedbackStatus('success');
+        setFeedbackMessage('');
+        setTimeout(() => {
+          setShowFeedbackModal(false);
+          setFeedbackStatus('idle');
+        }, 2000);
+      } else {
+        setFeedbackStatus('error');
+      }
+    } catch {
+      setFeedbackStatus('error');
+    }
+  }
+
+  function closeFeedbackModal() {
+    setShowFeedbackModal(false);
+    setFeedbackMessage('');
+    setFeedbackStatus('idle');
+  }
+
   // Filter rules
   const allRules: Array<{ domain: string; rule: CSSRule }> = [];
   for (const [domain, domainRules] of Object.entries(domains)) {
@@ -207,7 +293,50 @@ function App() {
     <div>
       <header>
         <h1>MalleableWeb Settings</h1>
+        <button class="btn btn-secondary" onClick={() => setShowFeedbackModal(true)}>
+          Feedback
+        </button>
       </header>
+
+      {showFeedbackModal && (
+        <div class="modal-overlay" onClick={closeFeedbackModal}>
+          <div class="modal" onClick={e => e.stopPropagation()}>
+            <h2>Feedback</h2>
+            <div class="form-group">
+              <label htmlFor="feedback-message">Message</label>
+              <textarea
+                id="feedback-message"
+                value={feedbackMessage}
+                onInput={e => setFeedbackMessage((e.target as HTMLTextAreaElement).value)}
+                placeholder="Tell us about your experience, bugs you've found, or features you'd like to see..."
+                rows={6}
+                disabled={feedbackStatus === 'sending' || feedbackStatus === 'success'}
+              />
+            </div>
+            <div class="modal-actions">
+              {feedbackStatus === 'success' ? (
+                <span class="status-message status-success">Thanks for your feedback!</span>
+              ) : feedbackStatus === 'error' ? (
+                <span class="status-message status-error">Failed to send. Please try again.</span>
+              ) : null}
+              <button
+                class="btn btn-secondary"
+                onClick={closeFeedbackModal}
+                disabled={feedbackStatus === 'sending'}
+              >
+                Cancel
+              </button>
+              <button
+                class="btn btn-primary"
+                onClick={handleSendFeedback}
+                disabled={!feedbackMessage.trim() || feedbackStatus === 'sending' || feedbackStatus === 'success'}
+              >
+                {feedbackStatus === 'sending' ? 'Sending...' : 'Send feedback'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <section class="section">
         <h2>API Configuration</h2>

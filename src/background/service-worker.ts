@@ -182,7 +182,10 @@ async function handleGenerateCSS(message: Message): Promise<{
 
     // Create the rule ID first so we can include it in the assistant message
     const ruleId = generateId();
-    const explanation = llmResponse.explanation || 'CSS applied successfully';
+    const explanation = llmResponse.explanation || 'Done! Your changes have been applied.';
+
+    // Generate a short name for the rule using Haiku
+    const ruleName = await llmClient.generateRuleName(request);
 
     // Build chat messages including the assistant response
     const assistantMessage: ChatMessage = {
@@ -200,6 +203,7 @@ async function handleGenerateCSS(message: Message): Promise<{
     // Create and save the rule
     const rule: CSSRule = {
       id: ruleId,
+      ruleName: ruleName,
       userRequest: request,
       generatedCSS: llmResponse.css,
       selectors: llmResponse.selectors || [],

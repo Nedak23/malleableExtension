@@ -8,6 +8,58 @@ function sanitizeForHeaders(str: string): string {
 }
 
 export class LLMClient {
+  async generateRuleName(userRequest: string): Promise<string> {
+    let apiKey = await getApiKey();
+
+    if (!apiKey) {
+      // Fallback to truncated request if no API key
+      return userRequest.slice(0, 30) + (userRequest.length > 30 ? '...' : '');
+    }
+
+    apiKey = sanitizeForHeaders(apiKey.trim());
+
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 50,
+          messages: [{
+            role: 'user',
+            content: `Generate a short 1-5 word name for this CSS rule request. Return ONLY the name, nothing else.\n\nRequest: "${userRequest}"`,
+          }],
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('API error');
+      }
+
+      const data = await response.json();
+      const name = data.content[0]?.text?.trim();
+
+      if (name && name.split(/\s+/).length <= 5) {
+        return name;
+      }
+
+      // If response is too long, take first 5 words
+      const truncatedName = name?.split(/\s+/).slice(0, 5).join(' ');
+      if (truncatedName) {
+        return truncatedName;
+      }
+      return userRequest.slice(0, 30) + (userRequest.length > 30 ? '...' : '');
+    } catch {
+      // Fallback to truncated request on error
+      return userRequest.slice(0, 30) + (userRequest.length > 30 ? '...' : '');
+    }
+  }
+
   async generateCSS(
     request: string,
     url: string,

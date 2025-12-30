@@ -190,8 +190,8 @@ export async function saveApiKey(apiKey: string): Promise<void> {
     },
   });
 
-  // Store crypto key in session storage (cleared on browser close)
-  await chrome.storage.session.set({
+  // Store crypto key in local storage (persists across browser restarts)
+  await chrome.storage.local.set({
     [CRYPTO_KEY_SESSION_KEY]: Array.from(new Uint8Array(exportedKey)),
   });
 }
@@ -200,7 +200,7 @@ export async function saveApiKey(apiKey: string): Promise<void> {
 export async function getApiKey(): Promise<string | null> {
   try {
     const [keyData, encryptedData] = await Promise.all([
-      chrome.storage.session.get(CRYPTO_KEY_SESSION_KEY),
+      chrome.storage.local.get(CRYPTO_KEY_SESSION_KEY),
       chrome.storage.local.get(API_KEY_STORAGE_KEY),
     ]);
 
@@ -242,7 +242,7 @@ export async function hasApiKey(): Promise<boolean> {
 // Clear API key
 export async function clearApiKey(): Promise<void> {
   await chrome.storage.local.remove(API_KEY_STORAGE_KEY);
-  await chrome.storage.session.remove(CRYPTO_KEY_SESSION_KEY);
+  await chrome.storage.local.remove(CRYPTO_KEY_SESSION_KEY);
 }
 
 // Extract main domain from hostname

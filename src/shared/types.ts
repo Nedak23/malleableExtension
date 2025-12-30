@@ -53,7 +53,6 @@ export type ClaudeModel = 'claude-sonnet-4-5-20250929' | 'claude-haiku-4-5-20251
 // User settings
 export interface UserSettings {
   model: ClaudeModel;
-  notifyOnFailure: boolean;
   theme: 'light' | 'dark' | 'system';
 }
 
@@ -81,7 +80,6 @@ export type MessageType =
   | 'GET_RULES_FOR_DOMAIN'
   | 'GET_ALL_RULES'
   | 'GENERATE_CSS'
-  | 'REGENERATE_RULE'
   | 'UPDATE_RULE'
   | 'DELETE_RULE'
   | 'INJECT_CSS'

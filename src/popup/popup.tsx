@@ -30,6 +30,20 @@ const CloseIcon = () => (
   </svg>
 );
 
+const EyeOpenIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
+const EyeClosedIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+    <line x1="1" y1="1" x2="23" y2="23" />
+  </svg>
+);
+
 function truncate(text: string, maxLength: number): string {
   return text.length > maxLength ? text.slice(0, maxLength) + '...' : text;
 }
@@ -94,7 +108,8 @@ function App() {
     setHasApiKey(keyResponse?.hasKey || false);
   }
 
-  async function loadRulesForDomain(d: string, skipAutoSelect = false) {
+  async function loadRulesForDomain(d: string, options: { skipAutoSelect?: boolean } = {}) {
+    const { skipAutoSelect = false } = options;
     const response = await chrome.runtime.sendMessage({
       type: 'GET_RULES_FOR_DOMAIN',
       domain: d,
@@ -222,7 +237,7 @@ function App() {
 
           // Clear draft and reload rules (skip auto-select since we set it explicitly)
           setDraftMessages([]);
-          await loadRulesForDomain(domain, true);
+          await loadRulesForDomain(domain, { skipAutoSelect: true });
           setActiveTabId(response.ruleId);
         } else {
           // Existing tab - append only the assistant message (user message already added above)
@@ -283,38 +298,49 @@ function App() {
     setIsProcessing(false);
   }
 
-  async function handleUndo(messageIndex: number, ruleId: string) {
+  async function handleToggleVisibility(messageIndex: number, ruleId: string, currentlyUndone: boolean) {
+    // Toggle the rule's enabled state
+    const newEnabled = currentlyUndone; // If undone, re-enable; if not undone, disable
+
     await chrome.runtime.sendMessage({
-      type: 'DELETE_RULE',
+      type: 'UPDATE_RULE',
       domain,
       ruleId,
+      updates: { enabled: newEnabled },
     });
 
-    // Mark message as undone
+    // Toggle message undone state and persist
     if (activeTabId === null) {
-      setDraftMessages(prev =>
-        prev.map((msg, i) => (i === messageIndex ? { ...msg, undone: true } : msg))
+      const updatedMessages = draftMessages.map((msg, i) =>
+        i === messageIndex ? { ...msg, undone: !currentlyUndone } : msg
       );
+      setDraftMessages(updatedMessages);
     } else {
-      setRules(prev => prev.map(r =>
-        r.id === activeTabId
-          ? {
-              ...r,
-              chatMessages: r.chatMessages.map((msg, i) =>
-                i === messageIndex ? { ...msg, undone: true } : msg
-              ),
-            }
-          : r
-      ));
+      const currentRule = rules.find(r => r.id === activeTabId);
+      if (currentRule) {
+        const updatedMessages = currentRule.chatMessages.map((msg, i) =>
+          i === messageIndex ? { ...msg, undone: !currentlyUndone } : msg
+        );
+
+        // Update local state
+        setRules(prev => prev.map(r =>
+          r.id === activeTabId
+            ? { ...r, chatMessages: updatedMessages }
+            : r
+        ));
+
+        // Persist to storage
+        await chrome.runtime.sendMessage({
+          type: 'SAVE_CHAT_MESSAGES',
+          domain,
+          ruleId: activeTabId,
+          messages: updatedMessages,
+        });
+      }
     }
 
-    // Reload rules since one was deleted
-    await loadRulesForDomain(domain);
-
-    // If the deleted rule was the active tab, switch to new tab
-    if (activeTabId === ruleId) {
-      setActiveTabId(null);
-    }
+    // Reload rules to reflect the enabled change
+    await loadRulesForDomain(domain, { skipAutoSelect: true });
   }
 
   async function handleCloseTab(ruleId: string) {
@@ -379,12 +405,7 @@ function App() {
           )}
         </div>
         <div class="header-right">
-          <div class="active-rules">
-            <span>{ruleCount} rule{ruleCount !== 1 ? 's' : ''} active</span>
-            <button class="text-btn" onClick={openSettings}>
-              Manage
-            </button>
-          </div>
+          <span class="active-rules">{ruleCount} rule{ruleCount !== 1 ? 's' : ''} active</span>
           <button class="icon-btn" onClick={openSettings} title="Settings">
             <SettingsIcon />
           </button>
@@ -463,16 +484,28 @@ function App() {
 
       <main class="chat-container">
         <div class="messages" ref={messagesRef}>
-          {activeMessages.map((msg, i) => (
-            <div key={msg.id || i} class={`message message-${msg.type} ${msg.undone ? 'undone' : ''}`}>
-              <div class="message-content">{msg.content}</div>
-              {msg.ruleId && !msg.undone && (
-                <button class="undo-btn" onClick={() => handleUndo(i, msg.ruleId!)}>
-                  Undo
-                </button>
-              )}
-            </div>
-          ))}
+          {(() => {
+            // Find the last message with a ruleId (computed once)
+            const lastMessageWithRuleIdx = activeMessages.reduce(
+              (lastIdx, m, idx) => (m.ruleId ? idx : lastIdx),
+              -1
+            );
+
+            return activeMessages.map((msg, i) => (
+              <div key={msg.id || i} class={`message message-${msg.type} ${msg.undone ? 'undone' : ''}`}>
+                <div class="message-content">{msg.content}</div>
+                {msg.ruleId && i === lastMessageWithRuleIdx && (
+                  <button
+                    class="visibility-toggle"
+                    onClick={() => handleToggleVisibility(i, msg.ruleId!, !!msg.undone)}
+                    title={msg.undone ? 'Show change' : 'Hide change'}
+                  >
+                    {msg.undone ? <EyeClosedIcon /> : <EyeOpenIcon />}
+                  </button>
+                )}
+              </div>
+            ));
+          })()}
 
           {isProcessing && (
             <div class="message message-loading">

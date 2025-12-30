@@ -1,6 +1,6 @@
 # MalleableWeb
 
-A Chrome extension that lets you customize any website using natural language commands, powered by Claude AI.
+A Chrome extension that lets you customize any website using natural language commands.
 
 ## Features
 
@@ -74,32 +74,3 @@ src/
   options/        # Settings page
   shared/         # Shared types and utilities
 ```
-
-### Scripts
-
-- `npm run dev` - Build in watch mode for development
-- `npm run build` - Production build
-- `npm run clean` - Remove build artifacts
-
-### Tech Stack
-
-- **Framework**: Preact (lightweight React alternative)
-- **Language**: TypeScript
-- **Bundler**: Webpack
-- **Extension**: Chrome Manifest V3
-
-## Feedback API Setup (Optional)
-
-To enable the feedback feature, deploy the feedback API:
-
-1. Navigate to the `feedback-api` directory
-2. Install dependencies: `npm install`
-3. Deploy to Vercel: `npm run deploy`
-4. Set environment variables in Vercel:
-   - `RESEND_API_KEY` - Your Resend API key
-   - `FEEDBACK_TO_EMAIL` - Email to receive feedback
-5. Update `FEEDBACK_API_URL` in `src/options/options.tsx` with your Vercel URL
-
-## License
-
-MIT

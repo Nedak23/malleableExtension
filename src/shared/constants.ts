@@ -6,7 +6,6 @@ export const STYLE_ELEMENT_ID = 'malleableweb-injected-styles';
 
 export const DEFAULT_SETTINGS = {
   model: 'claude-sonnet-4-5-20250929' as const,
-  notifyOnFailure: true,
   theme: 'system' as const,
 };
 

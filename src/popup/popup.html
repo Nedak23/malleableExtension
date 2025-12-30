@@ -194,44 +194,28 @@
       40% { transform: translateY(-6px); }
     }
 
-    .undo-btn {
+    .visibility-toggle {
       background: none;
       border: none;
-      color: #0066cc;
-      font-size: 12px;
+      color: #666;
       cursor: pointer;
       margin-top: 6px;
-      padding: 2px 0;
+      padding: 4px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, color 0.15s;
     }
 
-    .undo-btn:hover {
-      text-decoration: underline;
-    }
-
-    .undo-btn:disabled {
-      color: #999;
-      cursor: default;
-      text-decoration: none;
+    .visibility-toggle:hover {
+      background: rgba(0, 0, 0, 0.08);
+      color: #333;
     }
 
     .active-rules {
-      display: flex;
-      align-items: center;
-      gap: 8px;
       font-size: 12px;
       color: #666;
-    }
-
-    .text-btn {
-      background: none;
-      border: none;
-      color: #0066cc;
-      cursor: pointer;
-      font-size: 12px;
-    }
-
-    .text-btn:hover {
-      text-decoration: underline;
     }
 
     .input-area {

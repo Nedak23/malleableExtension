@@ -13,7 +13,6 @@ import {
   getSettings,
   saveSettings,
   generateId,
-  extractDomain,
   getChatMessages,
   saveChatMessages,
   clearChatMessages,
@@ -55,10 +54,6 @@ async function handleMessage(
 
     case 'GENERATE_CSS': {
       return await handleGenerateCSS(message);
-    }
-
-    case 'REGENERATE_RULE': {
-      return await handleRegenerateRule(message);
     }
 
     case 'UPDATE_RULE': {
@@ -236,75 +231,9 @@ async function handleGenerateCSS(message: Message): Promise<{
   }
 }
 
-async function handleRegenerateRule(message: Message): Promise<{
-  success: boolean;
-  error?: string;
-}> {
-  const domain = message.domain as string;
-  const ruleId = message.ruleId as string;
-  const tabId = message.tabId as number;
-
-  try {
-    const rule = await getRule(domain, ruleId);
-    if (!rule) {
-      return { success: false, error: 'Rule not found' };
-    }
-
-    // Get fresh DOM from content script
-    const domResponse = await chrome.tabs.sendMessage(tabId, {
-      type: 'SERIALIZE_DOM',
-      userRequest: rule.userRequest,
-    });
-
-    if (!domResponse?.serializedDOM) {
-      return { success: false, error: 'Failed to serialize page DOM' };
-    }
-
-    // Get tab info
-    const tab = await chrome.tabs.get(tabId);
-
-    // Call LLM to regenerate CSS
-    const llmResponse: LLMResponse = await llmClient.generateCSS(
-      rule.userRequest,
-      tab.url || '',
-      tab.title || '',
-      domResponse.serializedDOM
-    );
-
-    if (!llmResponse.success || !llmResponse.css) {
-      return {
-        success: false,
-        error: llmResponse.error || 'Failed to regenerate CSS',
-      };
-    }
-
-    // Update the rule
-    await updateRule(domain, ruleId, {
-      generatedCSS: llmResponse.css,
-      selectors: llmResponse.selectors || [],
-      confidence: llmResponse.confidence || 0.8,
-      status: 'active',
-      failureCount: 0,
-      lastValidated: Date.now(),
-    });
-
-    // Inject updated CSS
-    await notifyTabsOfUpdate(domain);
-
-    return { success: true };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-  }
-}
-
 async function handleValidationFailure(message: Message): Promise<void> {
   const domain = message.domain as string;
   const failedRuleIds = message.failedRuleIds as string[];
-
-  const settings = await getSettings();
 
   for (const ruleId of failedRuleIds) {
     const rule = await getRule(domain, ruleId);
@@ -319,16 +248,6 @@ async function handleValidationFailure(message: Message): Promise<void> {
     }
 
     await updateRule(domain, ruleId, { failureCount, status });
-
-    // Notify user if enabled and rule is now broken
-    if (settings.notifyOnFailure && status === 'broken' && rule.status !== 'broken') {
-      chrome.notifications.create({
-        type: 'basic',
-        iconUrl: 'assets/icons/icon48.png',
-        title: 'MalleableWeb Rule Issue',
-        message: `Rule "${rule.userRequest.slice(0, 50)}" on ${domain} stopped working.`,
-      });
-    }
   }
 }
 

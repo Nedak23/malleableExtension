@@ -136,31 +136,6 @@ function App() {
     });
   }
 
-  async function handleRegenerateRule(domain: string, ruleId: string) {
-    // Find a tab with this domain
-    const tabs = await chrome.tabs.query({ url: `*://*.${domain}/*` });
-    const wwwTabs = await chrome.tabs.query({ url: `*://www.${domain}/*` });
-    const allTabs = [...tabs, ...wwwTabs];
-
-    if (allTabs.length === 0) {
-      alert(`Please open ${domain} in a tab first, then try regenerating.`);
-      return;
-    }
-
-    const response = await chrome.runtime.sendMessage({
-      type: 'REGENERATE_RULE',
-      domain,
-      ruleId,
-      tabId: allTabs[0].id,
-    });
-
-    if (response.success) {
-      await loadData();
-    } else {
-      alert(`Failed to regenerate: ${response.error}`);
-    }
-  }
-
   function exportRules() {
     const data = JSON.stringify(domains, null, 2);
     const blob = new Blob([data], { type: 'application/json' });
@@ -382,25 +357,6 @@ function App() {
       </section>
 
       <section class="section">
-        <h2>Preferences</h2>
-
-        <div class="toggle-group">
-          <label class="toggle-label">
-            <span class="toggle">
-              <input
-                type="checkbox"
-                checked={settings.notifyOnFailure}
-                onChange={e => handleSettingsChange({ notifyOnFailure: (e.target as HTMLInputElement).checked })}
-              />
-              <span class="toggle-slider"></span>
-            </span>
-            <span>Notify when rules stop working</span>
-          </label>
-          <p class="toggle-description">Show a notification when a rule fails to apply</p>
-        </div>
-      </section>
-
-      <section class="section">
         <h2>Manage Rules</h2>
 
         <div class="filter-bar">
@@ -425,7 +381,6 @@ function App() {
           >
             <option value="all">All statuses</option>
             <option value="active">Active</option>
-            <option value="broken">Broken</option>
             <option value="disabled">Disabled</option>
           </select>
         </div>
@@ -451,14 +406,6 @@ function App() {
                   <span class={`rule-status rule-status-${rule.status}`}>
                     {rule.status}
                   </span>
-                  {rule.status === 'broken' && (
-                    <button
-                      class="btn btn-small btn-secondary"
-                      onClick={() => handleRegenerateRule(domain, rule.id)}
-                    >
-                      Regen
-                    </button>
-                  )}
                   <button
                     class="btn btn-small btn-danger-text"
                     onClick={() => handleDeleteRule(domain, rule.id)}

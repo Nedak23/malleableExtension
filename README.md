@@ -61,16 +61,3 @@ When you create a rule, the following is sent to the Claude API:
 - A simplified DOM structure (no form data or sensitive content)
 
 See [PRIVACY.md](PRIVACY.md) for full details.
-
-## Development
-
-### Project Structure
-
-```
-src/
-  background/     # Service worker for API calls and rule management
-  content/        # Content script for DOM serialization and CSS injection
-  popup/          # Extension popup UI
-  options/        # Settings page
-  shared/         # Shared types and utilities
-```

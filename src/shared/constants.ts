@@ -9,9 +9,6 @@ export const DEFAULT_SETTINGS = {
   theme: 'system' as const,
 };
 
-// Failure threshold
-export const BROKEN_THRESHOLD = 3;
-
 // DOM serialization limits
 export const DOM_MAX_DEPTH = 10;
 export const DOM_MAX_CHILDREN = 20;

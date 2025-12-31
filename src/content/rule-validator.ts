@@ -107,7 +107,7 @@ export class RuleValidator {
         }
       }
 
-      // If no selectors work for this rule, it's broken
+      // If no selectors work for this rule, track it as a failure
       if (!ruleValid && this.lastValidation.size > 0) {
         failures.push(ruleId);
       }

@@ -1,5 +1,4 @@
-// Rule status progression: active → broken
-export type RuleStatus = 'active' | 'broken' | 'disabled';
+export type RuleStatus = 'active' | 'disabled';
 
 // Chat message in a conversation
 export interface ChatMessage {
@@ -31,7 +30,7 @@ export interface CSSRule {
   selectorStrategies: SelectorStrategy[];
   enabled: boolean;
   status: RuleStatus;
-  previousStatus?: 'active' | 'broken';  // Status before being disabled
+  previousStatus?: 'active';  // Status before being disabled
   failureCount: number;
   confidence: number;
   createdAt: number;

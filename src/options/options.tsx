@@ -90,7 +90,7 @@ function App() {
       // If already disabled, preserve the existing previousStatus
       const previousStatus = currentRule.status === 'disabled'
         ? currentRule.previousStatus || 'active'
-        : (currentRule.status as 'active' | 'broken');
+        : 'active';
       updates = { enabled, status: 'disabled', previousStatus };
     }
 

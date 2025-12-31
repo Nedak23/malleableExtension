@@ -18,7 +18,6 @@ import {
   clearChatMessages,
   migrateWarningStatus,
 } from '../shared/storage';
-import { BROKEN_THRESHOLD } from '../shared/constants';
 
 // Run migrations on startup (wrapped in IIFE to properly await)
 (async () => {
@@ -241,13 +240,8 @@ async function handleValidationFailure(message: Message): Promise<void> {
 
     // Increment failure count
     const failureCount = rule.failureCount + 1;
-    let status = rule.status;
 
-    if (failureCount >= BROKEN_THRESHOLD) {
-      status = 'broken';
-    }
-
-    await updateRule(domain, ruleId, { failureCount, status });
+    await updateRule(domain, ruleId, { failureCount });
   }
 }
 

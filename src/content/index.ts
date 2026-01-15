@@ -1,6 +1,7 @@
 import { injectStoredCSS, setupCSSListener } from './css-injector';
 import { RuleValidator } from './rule-validator';
 import { serializeForLLM } from './dom-serializer';
+import { handlePickerMessage } from './element-picker';
 
 // Inject CSS immediately (runs at document_start)
 injectStoredCSS();
@@ -19,11 +20,19 @@ if (document.readyState === 'loading') {
   validator.start();
 }
 
-// Listen for DOM serialization requests from the popup
+// Listen for messages from popup and service worker
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  // DOM serialization request
   if (message.type === 'SERIALIZE_DOM') {
     const serialized = serializeForLLM(message.userRequest || '');
     sendResponse({ serializedDOM: serialized });
+    return true;
   }
+
+  // Element picker messages
+  if (handlePickerMessage(message, sendResponse)) {
+    return true;
+  }
+
   return true;
 });

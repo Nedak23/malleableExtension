@@ -1,4 +1,4 @@
-import { Message, CSSRule, LLMResponse, ChatMessage } from '../shared/types';
+import { Message, CSSRule, LLMResponse, ChatMessage, SelectedElement } from '../shared/types';
 import { llmClient } from './llm-client';
 import {
   getCSSForDomain,
@@ -121,6 +121,17 @@ async function handleMessage(
       return { success: true };
     }
 
+    case 'ELEMENT_SELECTED': {
+      // Element was selected - forward to popup if it's open
+      // The popup listens for this message directly
+      return { success: true };
+    }
+
+    case 'PICKER_CANCELLED': {
+      // User cancelled element picker - just acknowledge
+      return { success: true };
+    }
+
     default:
       return { error: 'Unknown message type' };
   }
@@ -138,6 +149,7 @@ async function handleGenerateCSS(message: Message): Promise<{
   const title = message.title as string;
   const tabId = message.tabId as number;
   const initialMessages = message.initialMessages as ChatMessage[] | undefined;
+  const selectedElement = message.selectedElement as SelectedElement | undefined;
 
   try {
     // Get serialized DOM from content script
@@ -159,12 +171,14 @@ async function handleGenerateCSS(message: Message): Promise<{
       return { success: false, error: 'Failed to serialize page DOM' };
     }
 
-    // Call LLM to generate CSS
+    // Call LLM to generate CSS with conversation history for context
     const llmResponse: LLMResponse = await llmClient.generateCSS(
       request,
       url,
       title,
-      domResponse.serializedDOM
+      domResponse.serializedDOM,
+      selectedElement,
+      initialMessages
     );
 
     if (!llmResponse.success || !llmResponse.css) {

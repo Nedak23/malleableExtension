@@ -1,3 +1,5 @@
+import { SelectedElement } from '../shared/types';
+
 export const SYSTEM_PROMPT = `You are a CSS generation expert for a browser extension. Your task is to generate CSS rules based on user requests and a simplified DOM representation.
 
 ## YOUR ROLE
@@ -106,11 +108,33 @@ export function formatUserPrompt(
   request: string,
   url: string,
   title: string,
-  dom: string
+  dom: string,
+  selectedElement?: SelectedElement
 ): string {
-  return `**User Request**: ${request}
+  let prompt = `**User Request**: ${request}
 **Page URL**: ${url}
-**Page Title**: ${title}
+**Page Title**: ${title}`;
+
+  // If user selected a specific element, include it with high priority
+  if (selectedElement) {
+    prompt += `
+
+**User Selected Element** (TARGET THIS ELEMENT):
+- Selector: \`${selectedElement.selector}\`
+- Tag: ${selectedElement.tagName}${selectedElement.id ? `#${selectedElement.id}` : ''}
+- Classes: ${selectedElement.classes.length ? selectedElement.classes.join(', ') : '(none)'}
+${selectedElement.text ? `- Text content: "${selectedElement.text}"` : ''}
+${selectedElement.parentSelector ? `- Parent: \`${selectedElement.parentSelector}\`` : ''}
+
+HTML snippet:
+\`\`\`html
+${selectedElement.outerHTML}
+\`\`\`
+
+IMPORTANT: The user explicitly selected this element. Use the provided selector or derive a more stable selector from the HTML snippet above.`;
+  }
+
+  prompt += `
 
 **Simplified DOM Structure**:
 \`\`\`
@@ -118,4 +142,6 @@ ${dom}
 \`\`\`
 
 Generate CSS to accomplish the user's request. Remember: the "explanation" field should be ONE simple, friendly sentence with NO technical terms - just confirm what you did for the user.`;
+
+  return prompt;
 }

@@ -1,6 +1,6 @@
 import { render } from 'preact';
 import { useState, useEffect, useRef } from 'preact/hooks';
-import { CSSRule, ChatMessage } from '../shared/types';
+import { CSSRule, ChatMessage, SelectedElement } from '../shared/types';
 
 // Icons as inline SVGs
 const SettingsIcon = () => (
@@ -44,6 +44,16 @@ const EyeClosedIcon = () => (
   </svg>
 );
 
+const CrosshairIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10" />
+    <line x1="22" y1="12" x2="18" y2="12" />
+    <line x1="6" y1="12" x2="2" y2="12" />
+    <line x1="12" y1="6" x2="12" y2="2" />
+    <line x1="12" y1="22" x2="12" y2="18" />
+  </svg>
+);
+
 function truncate(text: string, maxLength: number): string {
   return text.length > maxLength ? text.slice(0, maxLength) + '...' : text;
 }
@@ -57,6 +67,8 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [domain, setDomain] = useState('');
   const [hasApiKey, setHasApiKey] = useState(true);
+  const [selectedElement, setSelectedElement] = useState<SelectedElement | null>(null);
+  const [isPickerActive, setIsPickerActive] = useState(false);
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -106,6 +118,24 @@ function App() {
     // Check API key
     const keyResponse = await chrome.runtime.sendMessage({ type: 'CHECK_API_KEY' });
     setHasApiKey(keyResponse?.hasKey || false);
+
+    // Check for selected element from picker
+    const stored = await chrome.storage.session.get('selectedElement');
+    if (stored.selectedElement) {
+      const element = stored.selectedElement as SelectedElement;
+      setSelectedElement(element);
+      // Clear it from storage after loading
+      await chrome.storage.session.remove('selectedElement');
+
+      // Add a system message to show feedback about the selection
+      const selectionMessage: ChatMessage = {
+        id: crypto.randomUUID(),
+        type: 'system',
+        content: `Selected: ${element.selector}`,
+        timestamp: Date.now(),
+      };
+      setDraftMessages(prev => [...prev, selectionMessage]);
+    }
   }
 
   async function loadRulesForDomain(d: string, options: { skipAutoSelect?: boolean } = {}) {
@@ -210,8 +240,13 @@ function App() {
         url: tab.url,
         title: tab.title,
         tabId: tab.id,
-        initialMessages: activeTabId === null ? allMessages : undefined,
+        // Always pass conversation history for context (enables follow-up requests)
+        initialMessages: allMessages,
+        selectedElement: selectedElement || undefined,
       });
+
+      // Clear selected element after use
+      setSelectedElement(null);
 
       if (response.success) {
         const assistantMessage: ChatMessage = {
@@ -377,6 +412,49 @@ function App() {
     }
   }
 
+  async function startElementPicker() {
+    // Get the active tab
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) return;
+
+    // Show picker active state
+    setIsPickerActive(true);
+
+    // Send message to content script to start picker
+    await chrome.tabs.sendMessage(tab.id, { type: 'START_ELEMENT_PICKER' });
+  }
+
+  // Listen for element selection or cancellation from content script
+  useEffect(() => {
+    function handleMessage(message: { type: string; element?: SelectedElement }) {
+      if (message.type === 'ELEMENT_SELECTED' && message.element) {
+        setSelectedElement(message.element);
+        setIsPickerActive(false);
+
+        // Add a system message to show feedback about the selection
+        const selectionMessage: ChatMessage = {
+          id: crypto.randomUUID(),
+          type: 'system',
+          content: `Selected: ${message.element.selector}`,
+          timestamp: Date.now(),
+        };
+        setDraftMessages(prev => [...prev, selectionMessage]);
+
+        // Focus the input so user can type their request
+        setTimeout(() => inputRef.current?.focus(), 100);
+      } else if (message.type === 'PICKER_CANCELLED') {
+        setIsPickerActive(false);
+      }
+    }
+
+    chrome.runtime.onMessage.addListener(handleMessage);
+    return () => chrome.runtime.onMessage.removeListener(handleMessage);
+  }, []);
+
+  function clearSelectedElement() {
+    setSelectedElement(null);
+  }
+
   function openSettings() {
     chrome.runtime.openOptionsPage();
   }
@@ -391,6 +469,15 @@ function App() {
 
   return (
     <>
+      {isPickerActive && (
+        <div class="picker-active-overlay">
+          <div class="picker-active-content">
+            <CrosshairIcon />
+            <p>Click an element on the page to select it</p>
+            <p class="picker-hint">Press Escape to cancel</p>
+          </div>
+        </div>
+      )}
       <header class="header">
         <div class="site-info">
           {domain && (
@@ -534,13 +621,32 @@ function App() {
       </main>
 
       <footer class="input-area">
+        {selectedElement && (
+          <div class="selected-element-preview">
+            <span class="selected-label">Selected:</span>
+            <span class="selected-selector" title={selectedElement.selector}>
+              {truncate(selectedElement.selector, 35)}
+            </span>
+            <button class="clear-selection-btn" onClick={clearSelectedElement} title="Clear selection">
+              <CloseIcon />
+            </button>
+          </div>
+        )}
         <div class="input-wrapper">
+          <button
+            class="picker-btn"
+            onClick={startElementPicker}
+            disabled={isProcessing || !hasApiKey}
+            title="Select an element on the page"
+          >
+            <CrosshairIcon />
+          </button>
           <textarea
             ref={inputRef}
             value={input}
             onInput={e => setInput((e.target as HTMLTextAreaElement).value)}
             onKeyDown={handleKeyDown}
-            placeholder={hasApiKey ? "Message" : "API key required - check settings"}
+            placeholder={hasApiKey ? (selectedElement ? "What should I do with this element?" : "Message") : "API key required - check settings"}
             rows={1}
             disabled={isProcessing || !hasApiKey}
           />

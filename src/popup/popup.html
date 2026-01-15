@@ -431,16 +431,24 @@
       cursor: not-allowed;
     }
 
+    .selected-elements-container {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 8px;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
     .selected-element-preview {
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 8px 12px;
-      margin-bottom: 8px;
+      padding: 6px 10px;
       background: #f0f7ff;
       border: 1px solid #cce0ff;
-      border-radius: 8px;
-      font-size: 12px;
+      border-radius: 6px;
+      font-size: 11px;
     }
 
     .selected-label {
@@ -476,48 +484,6 @@
       color: #333;
     }
 
-    /* Element picker active overlay */
-    .picker-active-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(255, 255, 255, 0.95);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-    }
-
-    .picker-active-content {
-      text-align: center;
-      padding: 24px;
-    }
-
-    .picker-active-content svg {
-      width: 48px;
-      height: 48px;
-      color: #0066cc;
-      margin-bottom: 16px;
-      animation: pulse 2s ease-in-out infinite;
-    }
-
-    .picker-active-content p {
-      color: #333;
-      font-size: 14px;
-      margin-bottom: 8px;
-    }
-
-    .picker-active-content .picker-hint {
-      color: #999;
-      font-size: 12px;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.7; transform: scale(1.1); }
-    }
   </style>
 </head>
 <body>

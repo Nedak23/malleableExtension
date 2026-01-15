@@ -96,7 +96,8 @@ export type MessageType =
   | 'ELEMENT_SELECTED'
   | 'PICKER_CANCELLED'
   | 'GET_SELECTED_ELEMENT'
-  | 'CLEAR_SELECTED_ELEMENT';
+  | 'CLEAR_SELECTED_ELEMENT'
+  | 'PING';
 
 export interface Message {
   type: MessageType;

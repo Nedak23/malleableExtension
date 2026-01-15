@@ -121,10 +121,23 @@ async function handleMessage(
       return { success: true };
     }
 
+    case 'PING': {
+      // Used to wake up service worker
+      return { pong: true };
+    }
+
     case 'ELEMENT_SELECTED': {
-      // Element was selected - forward to popup if it's open
-      // The popup listens for this message directly
-      return { success: true };
+      // Element was selected - show badge to indicate selection is ready
+      console.log('[MalleableWeb SW] Element selection received:', (message.element as SelectedElement)?.selector);
+
+      try {
+        await chrome.action.setBadgeText({ text: '1' });
+        await chrome.action.setBadgeBackgroundColor({ color: '#0066cc' });
+        return { success: true };
+      } catch (error) {
+        console.error('[MalleableWeb SW] Error setting badge:', error);
+        return { success: false, error: String(error) };
+      }
     }
 
     case 'PICKER_CANCELLED': {
@@ -149,7 +162,7 @@ async function handleGenerateCSS(message: Message): Promise<{
   const title = message.title as string;
   const tabId = message.tabId as number;
   const initialMessages = message.initialMessages as ChatMessage[] | undefined;
-  const selectedElement = message.selectedElement as SelectedElement | undefined;
+  const selectedElements = message.selectedElements as SelectedElement[] | undefined;
 
   try {
     // Get serialized DOM from content script
@@ -177,7 +190,7 @@ async function handleGenerateCSS(message: Message): Promise<{
       url,
       title,
       domResponse.serializedDOM,
-      selectedElement,
+      selectedElements,
       initialMessages
     );
 

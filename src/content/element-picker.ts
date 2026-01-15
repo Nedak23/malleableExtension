@@ -38,6 +38,38 @@ const PICKER_STYLES = `
   .malleableweb-picker-active * {
     cursor: crosshair !important;
   }
+
+  .malleableweb-selection-toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1f2937;
+    color: #f3f4f6;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    z-index: 2147483647;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    animation: malleableweb-toast-fade 3s ease-in-out forwards;
+  }
+
+  .malleableweb-selection-toast svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+  }
+
+  @keyframes malleableweb-toast-fade {
+    0% { opacity: 0; transform: translateX(-50%) translateY(20px); }
+    10% { opacity: 1; transform: translateX(-50%) translateY(0); }
+    80% { opacity: 1; }
+    100% { opacity: 0; }
+  }
 `;
 
 class ElementPicker {
@@ -118,6 +150,60 @@ class ElementPicker {
     this.onCancel = null;
   }
 
+  showSelectionToast(): void {
+    // Inject styles if not already present (they may have been cleaned up)
+    if (!document.querySelector('style[data-malleableweb-toast]')) {
+      const style = document.createElement('style');
+      style.setAttribute('data-malleableweb-toast', 'true');
+      style.textContent = `
+        .malleableweb-selection-toast {
+          position: fixed;
+          bottom: 20px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: #1f2937;
+          color: #f3f4f6;
+          padding: 12px 24px;
+          border-radius: 8px;
+          font-size: 14px;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          z-index: 2147483647;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          animation: malleableweb-toast-fade 3s ease-in-out forwards;
+        }
+        .malleableweb-selection-toast svg {
+          width: 20px;
+          height: 20px;
+          flex-shrink: 0;
+        }
+        @keyframes malleableweb-toast-fade {
+          0% { opacity: 0; transform: translateX(-50%) translateY(20px); }
+          10% { opacity: 1; transform: translateX(-50%) translateY(0); }
+          80% { opacity: 1; }
+          100% { opacity: 0; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = 'malleableweb-selection-toast';
+    toast.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+      </svg>
+      <span>Element selected! Click the extension icon.</span>
+    `;
+    document.body.appendChild(toast);
+
+    // Remove after animation completes
+    setTimeout(() => toast.remove(), 3000);
+  }
+
   private handleMouseMove = (e: MouseEvent): void => {
     if (!this.isActive) return;
 
@@ -149,8 +235,10 @@ class ElementPicker {
     e.stopPropagation();
 
     const selectedElement = this.extractElementInfo(this.currentElement);
+    const onSelectCallback = this.onSelect;
     this.stop();
-    this.onSelect?.(selectedElement);
+    this.showSelectionToast();
+    onSelectCallback?.(selectedElement);
   };
 
   private handleKeyDown = (e: KeyboardEvent): void => {
@@ -327,6 +415,49 @@ class ElementPicker {
 // Singleton instance
 export const elementPicker = new ElementPicker();
 
+// Helper to save selected element and notify service worker
+async function saveSelectedElement(selected: SelectedElement): Promise<void> {
+  console.log('[MalleableWeb] Saving element:', selected.selector);
+
+  // Try to store in both session and local storage for reliability
+  // Local storage is more universally available
+  let stored = false;
+
+  // Try local storage first (more reliable in content scripts)
+  try {
+    await chrome.storage.local.set({ selectedElement: selected });
+    console.log('[MalleableWeb] Stored in local storage');
+    stored = true;
+  } catch (localError) {
+    console.warn('[MalleableWeb] Local storage failed:', localError);
+  }
+
+  // Also try session storage as backup
+  try {
+    await chrome.storage.session.set({ selectedElement: selected });
+    console.log('[MalleableWeb] Also stored in session storage');
+    stored = true;
+  } catch (sessionError) {
+    // Session storage often fails in restricted contexts - this is expected
+    console.log('[MalleableWeb] Session storage not available (this is okay)');
+  }
+
+  if (!stored) {
+    console.error('[MalleableWeb] Could not store element in any storage');
+  }
+
+  // Notify service worker to set badge
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'ELEMENT_SELECTED',
+      element: selected,
+    });
+    console.log('[MalleableWeb] Service worker response:', response);
+  } catch (msgError) {
+    console.error('[MalleableWeb] Message to service worker failed:', msgError);
+  }
+}
+
 // Message handler for picker commands
 export function handlePickerMessage(
   message: { type: string },
@@ -335,15 +466,14 @@ export function handlePickerMessage(
   if (message.type === 'START_ELEMENT_PICKER') {
     elementPicker.start(
       (selected) => {
-        // Store selection and notify popup to reopen
-        chrome.storage.session.set({ selectedElement: selected }, () => {
-          // Open popup - this will fail silently if not supported
-          chrome.runtime.sendMessage({ type: 'ELEMENT_SELECTED', element: selected });
+        // Call async function and handle any unhandled rejections
+        saveSelectedElement(selected).catch((err) => {
+          console.error('[MalleableWeb] Unhandled error in saveSelectedElement:', err);
         });
       },
       () => {
-        // User cancelled
-        chrome.runtime.sendMessage({ type: 'PICKER_CANCELLED' });
+        // User cancelled - fire and forget
+        chrome.runtime.sendMessage({ type: 'PICKER_CANCELLED' }).catch(() => {});
       }
     );
     sendResponse({ success: true });

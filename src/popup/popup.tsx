@@ -67,8 +67,7 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [domain, setDomain] = useState('');
   const [hasApiKey, setHasApiKey] = useState(true);
-  const [selectedElement, setSelectedElement] = useState<SelectedElement | null>(null);
-  const [isPickerActive, setIsPickerActive] = useState(false);
+  const [selectedElements, setSelectedElements] = useState<SelectedElement[]>([]);
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -105,6 +104,31 @@ function App() {
     }
   }, [showNewTabPicker]);
 
+  // Persist draft messages to local storage (session storage can be unreliable)
+  useEffect(() => {
+    if (draftMessages.length > 0) {
+      chrome.storage.local.set({ popupDraftMessages: draftMessages }).catch((e) => {
+        console.error('[MalleableWeb Popup] Failed to save draft messages:', e);
+      });
+    } else {
+      chrome.storage.local.remove('popupDraftMessages').catch(() => {});
+    }
+  }, [draftMessages]);
+
+  // Persist input to local storage (debounced)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (input) {
+        chrome.storage.local.set({ popupDraftInput: input }).catch((e) => {
+          console.error('[MalleableWeb Popup] Failed to save draft input:', e);
+        });
+      } else {
+        chrome.storage.local.remove('popupDraftInput').catch(() => {});
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [input]);
+
   async function init() {
     // Get current tab info
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -119,22 +143,58 @@ function App() {
     const keyResponse = await chrome.runtime.sendMessage({ type: 'CHECK_API_KEY' });
     setHasApiKey(keyResponse?.hasKey || false);
 
-    // Check for selected element from picker
-    const stored = await chrome.storage.session.get('selectedElement');
-    if (stored.selectedElement) {
-      const element = stored.selectedElement as SelectedElement;
-      setSelectedElement(element);
-      // Clear it from storage after loading
-      await chrome.storage.session.remove('selectedElement');
+    // Check for selected element from picker and restore existing selections
+    try {
+      // First restore existing selections from local storage
+      const existingSelections = await chrome.storage.local.get('selectedElements');
+      let currentSelections: SelectedElement[] = existingSelections.selectedElements || [];
 
-      // Add a system message to show feedback about the selection
-      const selectionMessage: ChatMessage = {
-        id: crypto.randomUUID(),
-        type: 'system',
-        content: `Selected: ${element.selector}`,
-        timestamp: Date.now(),
-      };
-      setDraftMessages(prev => [...prev, selectionMessage]);
+      // Check for newly selected element (try local storage first, then session)
+      let newElement: SelectedElement | null = null;
+
+      const localStored = await chrome.storage.local.get('selectedElement');
+      if (localStored.selectedElement) {
+        newElement = localStored.selectedElement as SelectedElement;
+        await chrome.storage.local.remove('selectedElement');
+      }
+
+      if (!newElement) {
+        const sessionStored = await chrome.storage.session.get('selectedElement');
+        if (sessionStored.selectedElement) {
+          newElement = sessionStored.selectedElement as SelectedElement;
+          await chrome.storage.session.remove('selectedElement');
+        }
+      }
+
+      // Add new element to selections if found
+      if (newElement) {
+        console.log('[MalleableWeb Popup] Found new selected element:', newElement.selector);
+        currentSelections = [...currentSelections, newElement];
+        // Save updated selections
+        await chrome.storage.local.set({ selectedElements: currentSelections });
+      }
+
+      if (currentSelections.length > 0) {
+        setSelectedElements(currentSelections);
+        // Update badge to show count
+        await chrome.action.setBadgeText({ text: String(currentSelections.length) });
+        await chrome.action.setBadgeBackgroundColor({ color: '#0066cc' });
+      } else {
+        // Clear badge if no selections
+        await chrome.action.setBadgeText({ text: '' });
+      }
+
+      // Restore draft state from local storage
+      const draftState = await chrome.storage.local.get(['popupDraftMessages', 'popupDraftInput']);
+      console.log('[MalleableWeb Popup] Restoring draft state:', draftState);
+      if (draftState.popupDraftMessages && draftState.popupDraftMessages.length > 0) {
+        setDraftMessages(prev => prev.length === 0 ? draftState.popupDraftMessages : prev);
+      }
+      if (draftState.popupDraftInput) {
+        setInput(draftState.popupDraftInput);
+      }
+    } catch (error) {
+      console.error('[MalleableWeb Popup] Error retrieving state:', error);
     }
   }
 
@@ -242,11 +302,11 @@ function App() {
         tabId: tab.id,
         // Always pass conversation history for context (enables follow-up requests)
         initialMessages: allMessages,
-        selectedElement: selectedElement || undefined,
+        selectedElements: selectedElements.length > 0 ? selectedElements : undefined,
       });
 
-      // Clear selected element after use
-      setSelectedElement(null);
+      // Clear selected elements after use
+      await clearAllSelectedElements();
 
       if (response.success) {
         const assistantMessage: ChatMessage = {
@@ -417,42 +477,30 @@ function App() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) return;
 
-    // Show picker active state
-    setIsPickerActive(true);
-
     // Send message to content script to start picker
     await chrome.tabs.sendMessage(tab.id, { type: 'START_ELEMENT_PICKER' });
+
+    // Close popup immediately - user will click extension icon again after selecting
+    window.close();
   }
 
-  // Listen for element selection or cancellation from content script
-  useEffect(() => {
-    function handleMessage(message: { type: string; element?: SelectedElement }) {
-      if (message.type === 'ELEMENT_SELECTED' && message.element) {
-        setSelectedElement(message.element);
-        setIsPickerActive(false);
-
-        // Add a system message to show feedback about the selection
-        const selectionMessage: ChatMessage = {
-          id: crypto.randomUUID(),
-          type: 'system',
-          content: `Selected: ${message.element.selector}`,
-          timestamp: Date.now(),
-        };
-        setDraftMessages(prev => [...prev, selectionMessage]);
-
-        // Focus the input so user can type their request
-        setTimeout(() => inputRef.current?.focus(), 100);
-      } else if (message.type === 'PICKER_CANCELLED') {
-        setIsPickerActive(false);
-      }
+  async function removeSelectedElement(index: number) {
+    const newSelections = selectedElements.filter((_, i) => i !== index);
+    setSelectedElements(newSelections);
+    // Save to storage
+    if (newSelections.length > 0) {
+      await chrome.storage.local.set({ selectedElements: newSelections });
+      await chrome.action.setBadgeText({ text: String(newSelections.length) });
+    } else {
+      await chrome.storage.local.remove('selectedElements');
+      await chrome.action.setBadgeText({ text: '' });
     }
+  }
 
-    chrome.runtime.onMessage.addListener(handleMessage);
-    return () => chrome.runtime.onMessage.removeListener(handleMessage);
-  }, []);
-
-  function clearSelectedElement() {
-    setSelectedElement(null);
+  async function clearAllSelectedElements() {
+    setSelectedElements([]);
+    await chrome.storage.local.remove('selectedElements');
+    await chrome.action.setBadgeText({ text: '' });
   }
 
   function openSettings() {
@@ -469,15 +517,6 @@ function App() {
 
   return (
     <>
-      {isPickerActive && (
-        <div class="picker-active-overlay">
-          <div class="picker-active-content">
-            <CrosshairIcon />
-            <p>Click an element on the page to select it</p>
-            <p class="picker-hint">Press Escape to cancel</p>
-          </div>
-        </div>
-      )}
       <header class="header">
         <div class="site-info">
           {domain && (
@@ -621,15 +660,19 @@ function App() {
       </main>
 
       <footer class="input-area">
-        {selectedElement && (
-          <div class="selected-element-preview">
-            <span class="selected-label">Selected:</span>
-            <span class="selected-selector" title={selectedElement.selector}>
-              {truncate(selectedElement.selector, 35)}
-            </span>
-            <button class="clear-selection-btn" onClick={clearSelectedElement} title="Clear selection">
-              <CloseIcon />
-            </button>
+        {selectedElements.length > 0 && (
+          <div class="selected-elements-container">
+            {selectedElements.map((element, index) => (
+              <div key={index} class="selected-element-preview">
+                <span class="selected-label">{index + 1}.</span>
+                <span class="selected-selector" title={element.selector}>
+                  {truncate(element.selector, 30)}
+                </span>
+                <button class="clear-selection-btn" onClick={() => removeSelectedElement(index)} title="Remove selection">
+                  <CloseIcon />
+                </button>
+              </div>
+            ))}
           </div>
         )}
         <div class="input-wrapper">
@@ -646,7 +689,7 @@ function App() {
             value={input}
             onInput={e => setInput((e.target as HTMLTextAreaElement).value)}
             onKeyDown={handleKeyDown}
-            placeholder={hasApiKey ? (selectedElement ? "What should I do with this element?" : "Message") : "API key required - check settings"}
+            placeholder={hasApiKey ? (selectedElements.length > 0 ? `What should I do with ${selectedElements.length === 1 ? 'this element' : 'these elements'}?` : "Message") : "API key required - check settings"}
             rows={1}
             disabled={isProcessing || !hasApiKey}
           />

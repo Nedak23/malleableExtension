@@ -109,29 +109,38 @@ export function formatUserPrompt(
   url: string,
   title: string,
   dom: string,
-  selectedElement?: SelectedElement
+  selectedElements?: SelectedElement[]
 ): string {
   let prompt = `**User Request**: ${request}
 **Page URL**: ${url}
 **Page Title**: ${title}`;
 
-  // If user selected a specific element, include it with high priority
-  if (selectedElement) {
+  // If user selected specific elements, include them with high priority
+  if (selectedElements && selectedElements.length > 0) {
+    const elementCount = selectedElements.length;
     prompt += `
 
-**User Selected Element** (TARGET THIS ELEMENT):
-- Selector: \`${selectedElement.selector}\`
-- Tag: ${selectedElement.tagName}${selectedElement.id ? `#${selectedElement.id}` : ''}
-- Classes: ${selectedElement.classes.length ? selectedElement.classes.join(', ') : '(none)'}
-${selectedElement.text ? `- Text content: "${selectedElement.text}"` : ''}
-${selectedElement.parentSelector ? `- Parent: \`${selectedElement.parentSelector}\`` : ''}
+**User Selected ${elementCount} Element${elementCount > 1 ? 's' : ''}** (TARGET ${elementCount > 1 ? 'THESE ELEMENTS' : 'THIS ELEMENT'}):`;
+
+    selectedElements.forEach((element, index) => {
+      prompt += `
+
+Element ${index + 1}:
+- Selector: \`${element.selector}\`
+- Tag: ${element.tagName}${element.id ? `#${element.id}` : ''}
+- Classes: ${element.classes.length ? element.classes.join(', ') : '(none)'}
+${element.text ? `- Text content: "${element.text}"` : ''}
+${element.parentSelector ? `- Parent: \`${element.parentSelector}\`` : ''}
 
 HTML snippet:
 \`\`\`html
-${selectedElement.outerHTML}
-\`\`\`
+${element.outerHTML}
+\`\`\``;
+    });
 
-IMPORTANT: The user explicitly selected this element. Use the provided selector or derive a more stable selector from the HTML snippet above.`;
+    prompt += `
+
+IMPORTANT: The user explicitly selected ${elementCount > 1 ? 'these elements' : 'this element'}. Use the provided selector${elementCount > 1 ? 's' : ''} or derive more stable selector${elementCount > 1 ? 's' : ''} from the HTML snippet${elementCount > 1 ? 's' : ''} above.`;
   }
 
   prompt += `

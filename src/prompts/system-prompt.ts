@@ -1,3 +1,5 @@
+import { SelectedElement } from '../shared/types';
+
 export const SYSTEM_PROMPT = `You are a CSS generation expert for a browser extension. Your task is to generate CSS rules based on user requests and a simplified DOM representation.
 
 ## YOUR ROLE
@@ -106,11 +108,42 @@ export function formatUserPrompt(
   request: string,
   url: string,
   title: string,
-  dom: string
+  dom: string,
+  selectedElements?: SelectedElement[]
 ): string {
-  return `**User Request**: ${request}
+  let prompt = `**User Request**: ${request}
 **Page URL**: ${url}
-**Page Title**: ${title}
+**Page Title**: ${title}`;
+
+  // If user selected specific elements, include them with high priority
+  if (selectedElements && selectedElements.length > 0) {
+    const elementCount = selectedElements.length;
+    prompt += `
+
+**User Selected ${elementCount} Element${elementCount > 1 ? 's' : ''}** (TARGET ${elementCount > 1 ? 'THESE ELEMENTS' : 'THIS ELEMENT'}):`;
+
+    selectedElements.forEach((element, index) => {
+      prompt += `
+
+Element ${index + 1}:
+- Selector: \`${element.selector}\`
+- Tag: ${element.tagName}${element.id ? `#${element.id}` : ''}
+- Classes: ${element.classes.length ? element.classes.join(', ') : '(none)'}
+${element.text ? `- Text content: "${element.text}"` : ''}
+${element.parentSelector ? `- Parent: \`${element.parentSelector}\`` : ''}
+
+HTML snippet:
+\`\`\`html
+${element.outerHTML}
+\`\`\``;
+    });
+
+    prompt += `
+
+IMPORTANT: The user explicitly selected ${elementCount > 1 ? 'these elements' : 'this element'}. Use the provided selector${elementCount > 1 ? 's' : ''} or derive more stable selector${elementCount > 1 ? 's' : ''} from the HTML snippet${elementCount > 1 ? 's' : ''} above.`;
+  }
+
+  prompt += `
 
 **Simplified DOM Structure**:
 \`\`\`
@@ -118,4 +151,6 @@ ${dom}
 \`\`\`
 
 Generate CSS to accomplish the user's request. Remember: the "explanation" field should be ONE simple, friendly sentence with NO technical terms - just confirm what you did for the user.`;
+
+  return prompt;
 }

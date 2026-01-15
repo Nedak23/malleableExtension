@@ -90,7 +90,14 @@ export type MessageType =
   | 'SERIALIZE_DOM'
   | 'GET_CHAT_MESSAGES'
   | 'SAVE_CHAT_MESSAGES'
-  | 'CLEAR_CHAT_MESSAGES';
+  | 'CLEAR_CHAT_MESSAGES'
+  | 'START_ELEMENT_PICKER'
+  | 'STOP_ELEMENT_PICKER'
+  | 'ELEMENT_SELECTED'
+  | 'PICKER_CANCELLED'
+  | 'GET_SELECTED_ELEMENT'
+  | 'CLEAR_SELECTED_ELEMENT'
+  | 'PING';
 
 export interface Message {
   type: MessageType;
@@ -117,4 +124,15 @@ export interface SerializedNode {
   href?: string;
   text?: string;
   children?: SerializedNode[];
+}
+
+// Selected element from element picker
+export interface SelectedElement {
+  selector: string;
+  tagName: string;
+  id?: string;
+  classes: string[];
+  text?: string;
+  outerHTML: string;
+  parentSelector?: string;
 }

@@ -161,31 +161,106 @@ function toCompactString(node: SerializedNode | null, indent = 0): string {
   return parts.filter(Boolean).join('\n');
 }
 
+// Synonyms for common UI elements - helps match user intent to actual DOM
+const KEYWORD_SYNONYMS: Record<string, string[]> = {
+  'shorts': ['short', 'reel', 'reels', 'vertical-video', 'vertical_video'],
+  'sidebar': ['side', 'rail', 'aside', 'complementary', 'sidenav', 'left-nav', 'right-nav'],
+  'ad': ['ads', 'advertisement', 'advertisements', 'sponsored', 'promo', 'promotion', 'banner'],
+  'comment': ['comments', 'replies', 'reply', 'discussion', 'feedback'],
+  'video': ['videos', 'player', 'stream', 'media', 'watch'],
+  'header': ['nav', 'navbar', 'navigation', 'topbar', 'top-bar', 'masthead'],
+  'footer': ['bottom', 'bottombar', 'bottom-bar'],
+  'popup': ['modal', 'dialog', 'overlay', 'lightbox', 'popover'],
+  'button': ['btn', 'cta', 'action'],
+  'menu': ['dropdown', 'submenu', 'menubar'],
+  'notification': ['notifications', 'alert', 'alerts', 'toast', 'snackbar'],
+  'search': ['searchbox', 'searchbar', 'search-box', 'search-bar', 'find'],
+  'login': ['signin', 'sign-in', 'log-in', 'auth', 'authenticate'],
+  'signup': ['register', 'sign-up', 'create-account', 'join'],
+  'profile': ['account', 'user', 'avatar', 'settings'],
+  'like': ['likes', 'upvote', 'thumbs-up', 'heart', 'favorite'],
+  'share': ['sharing', 'social', 'repost', 'retweet'],
+  'subscribe': ['subscription', 'follow', 'following'],
+  'chat': ['messenger', 'message', 'messages', 'dm', 'inbox'],
+  'story': ['stories', 'reel'],
+  'feed': ['timeline', 'stream', 'home'],
+  'trending': ['popular', 'explore', 'discover'],
+  'recommended': ['suggestions', 'recommended', 'for-you', 'foryou'],
+};
+
+// Expand keywords with synonyms
+function expandKeywords(keywords: string[]): string[] {
+  const expanded = new Set<string>();
+  for (const kw of keywords) {
+    expanded.add(kw);
+    // Check if this keyword has synonyms
+    const synonyms = KEYWORD_SYNONYMS[kw];
+    if (synonyms) {
+      synonyms.forEach(s => expanded.add(s));
+    }
+    // Also check if this keyword is a synonym of something
+    for (const [key, values] of Object.entries(KEYWORD_SYNONYMS)) {
+      if (values.includes(kw)) {
+        expanded.add(key);
+        values.forEach(s => expanded.add(s));
+      }
+    }
+  }
+  return Array.from(expanded);
+}
+
 // Find elements matching keywords (for focused serialization)
 function findRelevantElements(hint: string): Element[] {
-  const keywords = hint.toLowerCase().split(/\s+/);
+  const rawKeywords = hint.toLowerCase().split(/\s+/).filter(k => k.length > 2);
+  const keywords = expandKeywords(rawKeywords);
   const matches: Element[] = [];
+  const matchedPaths = new Set<string>();
 
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
 
   while (walker.nextNode()) {
     const el = walker.currentNode as Element;
+
+    // Build searchable text from element attributes
     const text = [
       el.textContent?.toLowerCase() || '',
       el.className?.toLowerCase?.() || '',
       el.id?.toLowerCase() || '',
+      el.tagName?.toLowerCase() || '',
       el.getAttribute('aria-label')?.toLowerCase() || '',
+      el.getAttribute('role')?.toLowerCase() || '',
+      el.getAttribute('title')?.toLowerCase() || '',
+      el.getAttribute('placeholder')?.toLowerCase() || '',
       ...(Array.from(el.attributes)
         .filter(a => a.name.startsWith('data-'))
-        .map(a => a.value.toLowerCase())),
+        .map(a => `${a.name} ${a.value}`.toLowerCase())),
     ].join(' ');
 
     if (keywords.some(kw => text.includes(kw))) {
-      matches.push(el);
+      // Avoid duplicate paths (parent already matched = skip children)
+      const path = getElementPath(el);
+      const isChild = Array.from(matchedPaths).some(p => path.startsWith(p));
+      if (!isChild) {
+        matches.push(el);
+        matchedPaths.add(path);
+      }
     }
   }
 
   return matches;
+}
+
+// Get a simple path for deduplication
+function getElementPath(el: Element): string {
+  const parts: string[] = [];
+  let current: Element | null = el;
+  while (current && current !== document.body) {
+    const tag = current.tagName.toLowerCase();
+    const id = current.id ? `#${current.id}` : '';
+    parts.unshift(`${tag}${id}`);
+    current = current.parentElement;
+  }
+  return parts.join('/');
 }
 
 // Main serialization function
@@ -199,26 +274,39 @@ export function serializeDOM(options: Partial<SerializationOptions> = {}): strin
 export function serializeFocused(hint: string): string {
   const matches = findRelevantElements(hint);
   const contexts: string[] = [];
+  const serializedPaths = new Set<string>();
 
-  // Serialize context around each match (up to 5)
-  for (const el of matches.slice(0, 5)) {
-    // Go up to parent for context
-    const parent = el.parentElement;
-    if (parent) {
-      const contextTree = serializeNode(parent, 0, {
+  // Serialize context around each match (up to 8)
+  for (const el of matches.slice(0, 8)) {
+    // Go up 2 levels for better context (grandparent if available)
+    let contextRoot = el.parentElement;
+    if (contextRoot?.parentElement &&
+        contextRoot.parentElement.tagName.toLowerCase() !== 'body') {
+      contextRoot = contextRoot.parentElement;
+    }
+
+    if (contextRoot) {
+      const path = getElementPath(contextRoot);
+      // Skip if we already serialized this or a parent
+      if (serializedPaths.has(path) ||
+          Array.from(serializedPaths).some(p => path.startsWith(p))) {
+        continue;
+      }
+
+      const contextTree = serializeNode(contextRoot, 0, {
         ...DEFAULT_OPTIONS,
-        maxDepth: 4, // Shallower for focused
-        maxChildren: 10,
+        maxDepth: 5, // Slightly deeper for better context
+        maxChildren: 15, // Include more siblings
       });
+
       if (contextTree) {
         contexts.push(toCompactString(contextTree));
+        serializedPaths.add(path);
       }
     }
   }
 
-  // Remove duplicates and join
-  const uniqueContexts = [...new Set(contexts)];
-  return uniqueContexts.join('\n---\n');
+  return contexts.join('\n---\n');
 }
 
 // Combined serialization: focused first, then full if needed

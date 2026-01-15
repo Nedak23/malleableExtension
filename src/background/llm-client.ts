@@ -1,6 +1,11 @@
-import { LLMResponse } from '../shared/types';
+import { LLMResponse, SelectedElement, ChatMessage } from '../shared/types';
 import { getApiKey, getSettings } from '../shared/storage';
 import { SYSTEM_PROMPT, formatUserPrompt } from '../prompts/system-prompt';
+
+interface AnthropicMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
 
 // Sanitize string to only contain printable ASCII characters for HTTP headers
 function sanitizeForHeaders(str: string): string {
@@ -64,7 +69,9 @@ export class LLMClient {
     request: string,
     url: string,
     title: string,
-    serializedDOM: string
+    serializedDOM: string,
+    selectedElements?: SelectedElement[],
+    conversationHistory?: ChatMessage[]
   ): Promise<LLMResponse> {
     let apiKey = await getApiKey();
 
@@ -76,10 +83,27 @@ export class LLMClient {
     apiKey = sanitizeForHeaders(apiKey.trim());
 
     const settings = await getSettings();
-    const userPrompt = formatUserPrompt(request, url, title, serializedDOM);
+    const userPrompt = formatUserPrompt(request, url, title, serializedDOM, selectedElements);
+
+    // Build messages array with conversation history for context
+    const messages: AnthropicMessage[] = [];
+
+    if (conversationHistory?.length) {
+      for (const msg of conversationHistory) {
+        if (msg.type === 'user') {
+          messages.push({ role: 'user', content: msg.content });
+        } else if (msg.type === 'assistant') {
+          messages.push({ role: 'assistant', content: msg.content });
+        }
+        // Skip 'error' and 'system' messages
+      }
+    }
+
+    // Add current request with full context (DOM, selected element, etc.)
+    messages.push({ role: 'user', content: userPrompt });
 
     try {
-      return await this.callAnthropic(apiKey, settings.model, userPrompt);
+      return await this.callAnthropic(apiKey, settings.model, messages);
     } catch (error) {
       return {
         success: false,
@@ -88,7 +112,7 @@ export class LLMClient {
     }
   }
 
-  private async callAnthropic(apiKey: string, model: string, userPrompt: string): Promise<LLMResponse> {
+  private async callAnthropic(apiKey: string, model: string, messages: AnthropicMessage[]): Promise<LLMResponse> {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -101,7 +125,7 @@ export class LLMClient {
         model,
         max_tokens: 1000,
         system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: userPrompt }],
+        messages,
       }),
     });
 
@@ -118,7 +142,7 @@ export class LLMClient {
     }
 
     try {
-      // Extract JSON from response (Claude may add explanation)
+      // Extract JSON from response (Claude may add explanation text around it)
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         return JSON.parse(jsonMatch[0]) as LLMResponse;

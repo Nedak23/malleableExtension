@@ -403,6 +403,87 @@
       border-top: 1px solid #e5e5e5;
       border-bottom: 1px solid #e5e5e5;
     }
+
+    /* Element picker styles */
+    .picker-btn {
+      width: 36px;
+      height: 36px;
+      border: 1px solid #ddd;
+      border-radius: 50%;
+      background: #fff;
+      color: #666;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.15s;
+    }
+
+    .picker-btn:hover:not(:disabled) {
+      border-color: #0066cc;
+      color: #0066cc;
+      background: #f0f7ff;
+    }
+
+    .picker-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .selected-elements-container {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 8px;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .selected-element-preview {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      background: #f0f7ff;
+      border: 1px solid #cce0ff;
+      border-radius: 6px;
+      font-size: 11px;
+    }
+
+    .selected-label {
+      color: #0066cc;
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+
+    .selected-selector {
+      flex: 1;
+      color: #333;
+      font-family: ui-monospace, monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .clear-selection-btn {
+      background: none;
+      border: none;
+      padding: 4px;
+      cursor: pointer;
+      border-radius: 4px;
+      color: #666;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .clear-selection-btn:hover {
+      background: rgba(0, 0, 0, 0.1);
+      color: #333;
+    }
+
   </style>
 </head>
 <body>

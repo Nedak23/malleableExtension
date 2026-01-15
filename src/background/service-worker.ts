@@ -1,4 +1,4 @@
-import { Message, CSSRule, LLMResponse, ChatMessage } from '../shared/types';
+import { Message, CSSRule, LLMResponse, ChatMessage, SelectedElement } from '../shared/types';
 import { llmClient } from './llm-client';
 import {
   getCSSForDomain,
@@ -121,6 +121,30 @@ async function handleMessage(
       return { success: true };
     }
 
+    case 'PING': {
+      // Used to wake up service worker
+      return { pong: true };
+    }
+
+    case 'ELEMENT_SELECTED': {
+      // Element was selected - show badge to indicate selection is ready
+      console.log('[MalleableWeb SW] Element selection received:', (message.element as SelectedElement)?.selector);
+
+      try {
+        await chrome.action.setBadgeText({ text: '1' });
+        await chrome.action.setBadgeBackgroundColor({ color: '#0066cc' });
+        return { success: true };
+      } catch (error) {
+        console.error('[MalleableWeb SW] Error setting badge:', error);
+        return { success: false, error: String(error) };
+      }
+    }
+
+    case 'PICKER_CANCELLED': {
+      // User cancelled element picker - just acknowledge
+      return { success: true };
+    }
+
     default:
       return { error: 'Unknown message type' };
   }
@@ -138,6 +162,7 @@ async function handleGenerateCSS(message: Message): Promise<{
   const title = message.title as string;
   const tabId = message.tabId as number;
   const initialMessages = message.initialMessages as ChatMessage[] | undefined;
+  const selectedElements = message.selectedElements as SelectedElement[] | undefined;
 
   try {
     // Get serialized DOM from content script
@@ -159,12 +184,14 @@ async function handleGenerateCSS(message: Message): Promise<{
       return { success: false, error: 'Failed to serialize page DOM' };
     }
 
-    // Call LLM to generate CSS
+    // Call LLM to generate CSS with conversation history for context
     const llmResponse: LLMResponse = await llmClient.generateCSS(
       request,
       url,
       title,
-      domResponse.serializedDOM
+      domResponse.serializedDOM,
+      selectedElements,
+      initialMessages
     );
 
     if (!llmResponse.success || !llmResponse.css) {

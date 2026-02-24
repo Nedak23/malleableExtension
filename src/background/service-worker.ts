@@ -19,6 +19,17 @@ import {
   migrateWarningStatus,
 } from '../shared/storage';
 
+// Capture screenshot of the active tab
+async function captureScreenshot(): Promise<string | undefined> {
+  try {
+    const screenshot = await chrome.tabs.captureVisibleTab({ format: 'jpeg', quality: 70 });
+    return screenshot;
+  } catch (error) {
+    console.debug('[MalleableWeb SW] Screenshot capture failed:', error);
+    return undefined;
+  }
+}
+
 // Run migrations on startup (wrapped in IIFE to properly await)
 (async () => {
   await migrateWarningStatus();
@@ -165,6 +176,13 @@ async function handleGenerateCSS(message: Message): Promise<{
   const selectedElements = message.selectedElements as SelectedElement[] | undefined;
 
   try {
+    // Capture screenshot of the visible tab for vision context
+    const settings = await getSettings();
+    let screenshot: string | undefined;
+    if (settings.visionEnabled) {
+      screenshot = await captureScreenshot();
+    }
+
     // Get serialized DOM from content script
     let domResponse;
     try {
@@ -191,7 +209,8 @@ async function handleGenerateCSS(message: Message): Promise<{
       title,
       domResponse.serializedDOM,
       selectedElements,
-      initialMessages
+      initialMessages,
+      screenshot
     );
 
     if (!llmResponse.success || !llmResponse.css) {

@@ -7,6 +7,7 @@ export const STYLE_ELEMENT_ID = 'malleableweb-injected-styles';
 export const DEFAULT_SETTINGS = {
   model: 'claude-sonnet-4-5-20250929' as const,
   theme: 'system' as const,
+  visionEnabled: true,
 };
 
 // DOM serialization limits

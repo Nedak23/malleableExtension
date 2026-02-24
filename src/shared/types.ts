@@ -53,6 +53,7 @@ export type ClaudeModel = 'claude-sonnet-4-5-20250929' | 'claude-haiku-4-5-20251
 export interface UserSettings {
   model: ClaudeModel;
   theme: 'light' | 'dark' | 'system';
+  visionEnabled: boolean;
 }
 
 // Root storage schema

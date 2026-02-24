@@ -2,9 +2,25 @@ import { LLMResponse, SelectedElement, ChatMessage } from '../shared/types';
 import { getApiKey, getSettings } from '../shared/storage';
 import { SYSTEM_PROMPT, formatUserPrompt } from '../prompts/system-prompt';
 
+interface AnthropicTextContent {
+  type: 'text';
+  text: string;
+}
+
+interface AnthropicImageContent {
+  type: 'image';
+  source: {
+    type: 'base64';
+    media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+    data: string;
+  };
+}
+
+type AnthropicContent = AnthropicTextContent | AnthropicImageContent;
+
 interface AnthropicMessage {
   role: 'user' | 'assistant';
-  content: string;
+  content: string | AnthropicContent[];
 }
 
 // Sanitize string to only contain printable ASCII characters for HTTP headers
@@ -71,7 +87,8 @@ export class LLMClient {
     title: string,
     serializedDOM: string,
     selectedElements?: SelectedElement[],
-    conversationHistory?: ChatMessage[]
+    conversationHistory?: ChatMessage[],
+    screenshot?: string
   ): Promise<LLMResponse> {
     let apiKey = await getApiKey();
 
@@ -99,8 +116,31 @@ export class LLMClient {
       }
     }
 
-    // Add current request with full context (DOM, selected element, etc.)
-    messages.push({ role: 'user', content: userPrompt });
+    // Build content array for current message (may include screenshot)
+    const currentContent: AnthropicContent[] = [];
+
+    // Add screenshot if provided and vision is enabled
+    if (screenshot && settings.visionEnabled) {
+      // Extract base64 data from data URL
+      const base64Data = screenshot.replace(/^data:image\/\w+;base64,/, '');
+      currentContent.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: 'image/jpeg',
+          data: base64Data,
+        },
+      });
+    }
+
+    // Add text prompt
+    currentContent.push({
+      type: 'text',
+      text: userPrompt,
+    });
+
+    // Add current request with full context (DOM, selected element, screenshot)
+    messages.push({ role: 'user', content: currentContent });
 
     try {
       return await this.callAnthropic(apiKey, settings.model, messages);
